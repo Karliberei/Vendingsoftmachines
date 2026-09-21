@@ -1,0 +1,102 @@
+import time
+
+class VendingMachine:
+    def __init__(self):
+        # 1. Configuração do inventário de produtos
+        self.produtos = {
+            "A1": {"nome": "Água Mineral", "preco": 1.00, "stock": 5},
+            "B2": {"nome": "Chocolate", "preco": 1.50, "stock": 2},
+            "C3": {"nome": "Batatas Fritas", "preco": 1.80, "stock": 0} # Exemplo esgotado
+        }
+        self.saldo = 0.0
+
+    def exibir_produtos(self):
+        print("\n--- PRODUTOS DISPONÍVEIS ---")
+        for codigo, info in self.produtos.items():
+            status = f"{info['preco']:.2f}€" if info['stock'] > 0 else "ESGOTADO"
+            print(f"[{codigo}] {info['nome']} - {status} (Stock: {info['stock']})")
+        print(f"Saldo Atual: {self.saldo:.2f}€")
+        print("----------------------------")
+
+    def inserir_moeda(self, valor):
+        # Aceita apenas moedas válidas de Euro
+        moedas_validas = [0.05, 0.10, 0.20, 0.50, 1.00, 2.00]
+        if valor in moedas_validas:
+            self.saldo += valor
+            print(f"-> Moeda de {valor:.2f}€ aceite.")
+        else:
+            print("-> Moeda rejeitada! A máquina só aceita moedas de 5c, 10c, 20c, 50c, 1€ e 2€.")
+
+    def selecionar_produto(self, codigo):
+        # Validação do código
+        if codigo not in self.produtos:
+            print("-> Erro: Código de produto inválido!")
+            return False
+
+        produto = self.produtos[codigo]
+
+        # Validação de stock
+        if produto["stock"] <= 0:
+            print(f"-> Erro: O produto '{produto['nome']}' está esgotado!")
+            return False
+
+        # Validação de saldo
+        if self.saldo < produto["preco"]:
+            falta = produto["preco"] - self.saldo
+            print(f"-> Erro: Saldo insuficiente. Falta inserir {falta:.2f}€.")
+            return False
+
+        # Se passou em todos os testes, processa a venda
+        self.dispensar_produto(codigo)
+        return True
+
+    def dispensar_produto(self, codigo):
+        produto = self.produtos[codigo]
+        produto["stock"] -= 1
+        troco = self.saldo - produto["preco"]
+        
+        print(f"\n[MECANISMO] A rodar espiral {codigo}...")
+        time.sleep(1) # Simula o tempo do motor a rodar
+        print(f" SUCCESS: {produto['nome']} dispensado com sucesso!")
+        
+        if troco > 0:
+            print(f"[TROCO] A dispensar troco: {troco:.2f}€ em moedas.")
+        
+        # Reset do saldo após a compra bem-sucedida
+        self.saldo = 0.0
+
+    def cancelar_e_devolver(self):
+        if self.saldo > 0:
+            print(f"\n[CANCELADO] Operação cancelada. A devolver o seu saldo: {self.saldo:.2f}€.")
+            self.saldo = 0.0
+        else:
+            print("\n Não há saldo para devolver.")
+
+# ==============================================================================
+# SIMULAÇÃO DA MÁQUINA EM FUNCIONAMENTO
+# ==============================================================================
+if __name__ == "__main__":
+    maquina = VendingMachine()
+    
+    # --- Cenário 1: Tentar comprar sem saldo suficiente ---
+    maquina.exibir_produtos()
+    print("\n[Utilizador escolhe B2 sem meter moedas]")
+    maquina.selecionar_produto("B2")
+    
+    # --- Cenário 2: Inserir moedas e pedir cancelamento ---
+    print("\n[Utilizador insere moedas]")
+    maquina.inserir_moeda(0.50)
+    maquina.inserir_moeda(1.00)
+    maquina.exibir_produtos()
+    print("[Utilizador carrega no botão de Devolução/Cancelar]")
+    maquina.cancelar_e_devolver()
+    
+    # --- Cenário 3: Compra bem-sucedida com troco ---
+    print("\n[Novo Utilizador insere moedas]")
+    maquina.inserir_moeda(2.00)
+    maquina.exibir_produtos()
+    print("[Utilizador escolhe o Chocolate B2]")
+    maquina.selecionar_produto("B2")
+    
+    # --- Estado Final da Máquina ---
+    maquina.exibir_produtos()
