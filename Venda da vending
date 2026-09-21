@@ -1,0 +1,117 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// --- DEFINIÇÃO DOS PINOS (ONDE PINAR) ---
+const int PINO_MOEDEIRO = 2;   // Cabo de sinal do moedeiro (gera pulsos)
+const int PINO_CANCELAR = 3;   // Botão de devolução de moedas
+const int MOTOR_A1      = 4;   // Relé/Motor do produto A1 (Água)
+const int MOTOR_B2      = 5;   // Relé/Motor do produto B2 (Chocolate)
+
+// Configuração do Ecrã LCD (Endereço 0x27, 16 colunas, 2 linhas)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Variáveis de controlo do sistema
+volatile float saldo = 0.0;
+const float PRECO_A1 = 1.00;
+const float PRECO_B2 = 1.50;
+
+// Função chamada automaticamente quando o moedeiro envia um sinal (Interrupção)
+void moedainserida() {
+  // Exemplo: Cada pulso do moedeiro configurado equivale a 0.10€
+  saldo += 0.10; 
+}
+
+void setup() {
+  // Configuração dos Pinos de Entrada
+  pinMode(PINO_MOEDEIRO, INPUT_PULLUP);
+  pinMode(PINO_CANCELAR, INPUT_PULLUP);
+  
+  // Associar o pino do moedeiro à função de contagem de dinheiro
+  attachInterrupt(digitalPinToInterrupt(PINO_MOEDEIRO), moedainserida, FALLING);
+
+  // Configuração os Pinos de Saída (Motores)
+  pinMode(MOTOR_A1, OUTPUT);
+  pinMode(MOTOR_B2, OUTPUT);
+  digitalWrite(MOTOR_A1, LOW); // Garante que o motor começa desligado
+  digitalWrite(MOTOR_B2, LOW);
+
+  // Inicializar o Ecrã LCD
+  lcd.init();
+  lcd.backlight();
+  atualizarEcra();
+}
+
+void loop() {
+  // 1. Atualiza constantemente o saldo no visor
+  static float saldoAnterior = -1;
+  if (saldo != saldoAnterior) {
+    atualizarEcra();
+    saldoAnterior = saldo;
+  }
+
+  // 2. Verificar se o utilizador carregou no botão Cancelar
+  if (digitalWrite(PINO_CANCELAR) == LOW) { // Botão pressionado (GND)
+    devolverDinheiro();
+  }
+
+  // 3. Simulação de botões de seleção de produto no painel físico
+  // Numa máquina real, usaria um teclado matricial ou mais botões digitais.
+  // Se o saldo chegar ao valor, a máquina liberta o produto automaticamente neste exemplo:
+  if (saldo >= PRECO_A1 && saldo < PRECO_B2) {
+    dispensarProduto(MOTOR_A1, "Agua Mineral", PRECO_A1);
+  } 
+  else if (saldo >= PRECO_B2) {
+    dispensarProduto(MOTOR_B2, "Chocolate", PRECO_B2);
+  }
+}
+
+void atualizarEcra() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Vending Machine");
+  lcd.setCursor(0, 1);
+  lcd.print("Saldo: ");
+  lcd.print(saldo);
+  lcd.print(" EUR");
+}
+
+void dispensarProduto(int pinoMotor, String nomeProduto, float preco) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("A dispensar:");
+  lcd.setCursor(0, 1);
+  lcd.print(nomeProduto);
+  
+  // Liga o motor por 2 segundos para rodar a espiral
+  digitalWrite(pinoMotor, HIGH);
+  delay(2000);
+  digitalWrite(pinoMotor, LOW);
+
+  // Calcula o troco líquido
+  float troco = saldo - preco;
+  if (troco > 0) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Troco: ");
+    lcd.print(troco);
+    lcd.print(" EUR");
+    delay(2000);
+  }
+
+  saldo = 0.0; // Faz o reset ao saldo
+  atualizarEcra();
+}
+
+void devolverDinheiro() {
+  if (saldo > 0) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("A devolver:");
+    lcd.setCursor(0, 1);
+    lcd.print(saldo);
+    lcd.print(" EUR");
+    delay(2000);
+    saldo = 0.0;
+  }
+  atualizarEcra();
+}
