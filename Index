@@ -1,0 +1,177 @@
+
+
+
+
+import express from 'express';
+import { EventEmitter } from 'events';
+
+const app = express();
+app.use(express.json());
+
+const PORT = process.env.PORT || 8080;
+
+// ==========================================
+// TELEMETRIA E HARDWARE ESTRUTURAL
+// ==========================================
+class VendingHardware extends EventEmitter {
+  constructor() {
+    super();
+    this.temperatura = 4.5;
+    this.movimentosDetetados = 0;
+  }
+  simularSensorTemperatura(novaTemp) {
+    this.temperatura = novaTemp;
+  }
+  simularAproximacaoCliente() {
+    this.movimentosDetetados++;
+  }
+}
+const hardwareMaquina = new VendingHardware();
+
+// ==========================================
+// BASE DE DADOS EM MEMÓRIA
+// ==========================================
+const Inventario = [
+  { id: 'c1', categoria: 'café', marca: 'Nespresso Prof', nome: 'Espresso Intenso', stock: 150, precoVenda: 1.20, custoItem: 0.30, dataAbastecimento: '2026-09-01', diasValidade: 180 },
+  { id: 's1', categoria: 'sandes', marca: 'Panrico', nome: 'Sandes Mista Integral', stock: 12, precoVenda: 2.50, custoItem: 1.10, dataAbastecimento: '2026-09-18', diasValidade: 4 },
+  { id: 'b1', categoria: 'bebidas', marca: 'Coca-Cola', nome: 'Coca-Cola Zero 33cl', stock: 45, precoVenda: 1.50, custoItem: 0.50, dataAbastecimento: '2026-08-15', diasValidade: 360 }
+];
+
+const ResumoFinanceiro = {
+  faturacaoTotal: 0,
+  custoMercadoria: 0,
+  lucroLiquido: 0,
+  pagamentosMoedas: 0,
+  pagamentosCartao: 0
+};
+
+function calcularValidade(produto) {
+  const abastecimento = new Date(produto.dataAbastecimento);
+  const limite = new Date(abastecimento.getTime() + produto.diasValidade * 24 * 60 * 60 * 1000);
+  const hoje = new Date();
+  const diasRestantes = Math.ceil((limite.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+  return {
+    dataLimite: limite.toISOString().split('T')[0],
+    diasRestantes: diasRestantes,
+    precisaRenovacao: diasRestantes <= 1
+  };
+}
+
+// ==========================================
+// ROTA PRINCIPAL: PAINEL VISUAL ONLINE (HTML/CSS)
+// ==========================================
+app.get('/', (req, res) => {
+  const itensHtml = Inventario.map(item => {
+    const val = calcularValidade(item);
+    const statusValidade = val.precisaRenovacao ? '<span style="color:red;font-weight:bold;">RENOVAR URGENTE</span>' : `<span style="color:green;">${val.diasRestantes} dias rest.</span>`;
+    const statusStock = item.stock <= 5 ? '<span style="color:red;font-weight:bold;">BAIXO</span>' : 'OK';
+   
+    return `
+      <tr>
+        <td><strong>${item.categoria.toUpperCase()}</strong> (${item.marca})<br><small>${item.nome}</small></td>
+        <td>${item.stock} unidades (${statusStock})</td>
+        <td>${val.dataLimite} (${statusValidade})</td>
+        <td>${item.precoVenda.toFixed(2)}€</td>
+        <td>
+          <button onclick="vender('${item.id}', 'moeda')">💵 Moeda</button>
+          <button onclick="vender('${item.id}', 'cartao')">💳 Cartão</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="pt">
+    <head>
+      <meta charset="UTF-8">
+      <title>Quantum Vending Engine - Dashboard</title>
+      <style>
+        body { font-family: system-ui, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .header { background: #1e293b; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .card h3 { margin: 0 0 10px 0; color: #64748b; font-size: 14px; text-transform: uppercase; }
+        .card .valor { font-size: 24px; font-weight: bold; color: #0f172a; }
+        table { width: 100%; background: white; border-collapse: collapse; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        th { background: #f8fafc; color: #64748b; }
+        button { background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 5px; }
+        button:hover { background: #1d4ed8; }
+        .btn-sensor { background: #10b981; margin-top: 10px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🚀 Quantum Vending Engine</h1>
+          <p>Painel de Controlo Online e Gestão Integrada</p>
+        </div>
+
+        <div class="grid">
+          <div class="card"><h3>Lucro Líquido Real</h3><div class="valor" id="lucro">${ResumoFinanceiro.lucroLiquido.toFixed(2)}€</div></div>
+          <div class="card"><h3>Faturação Bruta</h3><div class="valor" id="faturacao">${ResumoFinanceiro.faturacaoTotal.toFixed(2)}€</div></div>
+          <div class="card"><h3>Pagamentos (Moeda / Cartão)</h3><div style="font-size:14px; margin-top:5px;">💵 Moedas: <span id="pMoedas">${ResumoFinanceiro.pagamentosMoedas.toFixed(2)}€</span><br>💳 Cartão: <span id="pCartao">${ResumoFinanceiro.pagamentosCartao.toFixed(2)}€</span></div></div>
+          <div class="card"><h3>Estado do Hardware</h3><div style="font-size:14px; margin-top:5px;">🌡️ Temp: ${hardwareMaquina.temperatura}°C<br>👥 Clientes: <span id="movs">${hardwareMaquina.movimentosDetetados}</span></div>
+               <button class="btn-sensor" onclick="simularMovimento()">Simular Passagem</button>
+          </div>
+        </div>
+
+        <h2>📦 Inventário e Ações de Venda</h2>
+        <table>
+          <thead>
+            <tr><th>Produto / Marca</th><th>Stock Atual</th><th>Validade Limite</th><th>Preço</th><th>Simular Compra Física</th></tr>
+          </thead>
+          <tbody>${itensHtml}</tbody>
+        </table>
+      </div>
+
+      <script>
+        function vender(id, metodo) {
+          fetch('/api/venda', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ produtoId: id, metodoPagamento: metodo })
+          }).then(() => window.location.reload());
+        }
+        function simularMovimento() {
+          fetch('/api/hardware/simular-movimento', { method: 'POST' })
+            .then(() => window.location.reload());
+        }
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+// ==========================================
+// ENDPOINTS DE PROCESSAMENTO DA API
+// ==========================================
+app.post('/api/venda', (req, res) => {
+  const { produtoId, metodoPagamento } = req.body;
+  const produto = Inventario.find(p => p.id === produtoId);
+
+  if (!produto || produto.stock <= 0) return res.status(400).end();
+
+  produto.stock--;
+  ResumoFinanceiro.faturacaoTotal += produto.precoVenda;
+  ResumoFinanceiro.custoMercadoria += produto.custoItem;
+  ResumoFinanceiro.lucroLiquido = ResumoFinanceiro.faturacaoTotal - ResumoFinanceiro.custoMercadoria;
+
+  if (metodoPagamento === 'cartao') {
+    ResumoFinanceiro.pagamentosCartao += produto.precoVenda;
+  } else {
+    ResumoFinanceiro.pagamentosMoedas += produto.precoVenda;
+  }
+  res.status(200).end();
+});
+
+app.post('/api/hardware/simular-movimento', (req, res) => {
+  hardwareMaquina.simularAproximacaoCliente();
+  res.status(200).end();
+});
+
+app.listen(PORT, () => console.log(`Servidor ativo na porta ${PORT}`));
+
+
