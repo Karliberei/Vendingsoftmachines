@@ -31,4 +31,7 @@ O software foi desenvolvido seguindo o modelo de uma **Máquina de Estados Finit
 ## 🛠️ Próximas Implementações
 * [ ] Adicionar suporte ao protocolo MDB (Multi-Drop Bus) para moedeiros industriais.
 * [ ] Criar um sistema automático de faturação que exporta as vendas diárias para um ficheiro `.csv`.
+## 🛠️ Próximas Implementações
+* [ ] Adicionar suporte ao protocolo MDB (Multi-Drop Bus) para moedeiros industriais.
+* [x] Criar um sistema automático de faturação que exporta as vendas diárias para um ficheiro .csv. (Concluído no ficheiro 'Venda da vending' ✅)
 
