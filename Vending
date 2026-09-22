@@ -232,3 +232,63 @@ void loop() {
 }
 
 
+
+[app]
+
+# (str) Título da sua aplicação comercial
+title = VendingSoft OS
+
+# (str) Nome do pacote (sem espaços, apenas caracteres alfanuméricos)
+package.name = vendingsoftos
+
+# (str) O domínio da sua organização (reverso, para identificação única)
+package.domain = com.karliberei
+
+# (str) Diretório onde se encontra o main.py (neste caso, a raiz do repositório)
+source.dir = .
+
+# (list) Extensões de ficheiros a incluir no pacote final
+source.include_exts = py,png,jpg,kv,atlas,json
+
+# (str) Versão da aplicação
+version = 1.0.0
+
+# (list) Dependências da Aplicação (Crucial para o seu Core Técnico)
+# Inclui o Kivy para a UI e garante os requisitos para as rotinas de rede/hardware
+requirements = python3,kivy,pyserial-asyncio,pydantic
+
+# (str) Orientação do ecrã (as máquinas de vending industriais usam maioritariamente Portrait - Vertical)
+orientation = portrait
+
+# (bool) Indicar se a aplicação deve preencher todo o ecrã (Full Screen)
+fullscreen = 1
+
+# =====================================================================
+# CONFIGURAÇÕES ESPECÍFICAS PARA ANDROID INDUSTRIAL
+# =====================================================================
+
+# (list) Permissões Android necessárias para a máquina de estados funcionar
+# INTERNET: Para transações financeiras na Cloud e telemetria
+# BLUETOOTH / USB: Para comunicar com placas controladoras MDB/relés físicas
+android.permissions = INTERNET, BLUETOOTH, BLUETOOTH_ADMIN, USB_PERMISSION
+
+# (int) API Mínima do Android suportada (Android 5.0 Lollipop)
+android.minapi = 21
+
+# (int) API Alvo do Android (Android 13 / 14 para conformidade moderna)
+android.api = 34
+
+# (str) Formato de saída (padrão APK para instalação direta na máquina)
+android.release_artifact = apk
+
+# (list) Arquiteturas de processador a compilar (arm64-v8a cobre quase todos os tablets/painéis modernos)
+android.archs = arm64-v8a, armeabi-v7a
+
+[buildozer]
+# (int) Nível de detalhe do log de compilação (2 = Debug Completo)
+log_level = 2
+
+# (int) Avisar se a compilação estiver a correr como root (segurança)
+warn_on_root = 1
+
+
