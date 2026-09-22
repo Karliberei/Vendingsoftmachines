@@ -63,3 +63,18 @@ Execute o script principal utilizando o comando correspondente ao seu sistema op
 O simulador irá iniciar um loop contínuo (painel interativo) no seu terminal, onde poderá testar a inserção de moedas, seleção de produtos e faturação.
 
 
+## 📱 Arquitetura da Aplicação Móvel (Android Engine)
+
+O ecossistema foi expandido para suportar uma interface gráfica nativa em dispositivos Android utilizando o framework **Kivy**, totalmente integrado com o loop de eventos assíncronos do Python (`asyncio`).
+
+### 🔬 Diferenciais de Engenharia da App:
+- **UI Não Bloqueante:** A interface visual (ecrã e botões) corre de forma independente das operações de hardware e rede, garantindo 0% de travamentos (*freezes*).
+- **Concorrência Pura:** O método `asyncio.ensure_future` acopla as corrotinas de inserção de saldo e despacho de produtos diretamente ao clock de renderização gráfica.
+- **Pronto para Android Industrial:** Estrutura otimizada para ser compilada via Buildozer para ecrãs táteis de máquinas de vending modernas.
+
+### 📲 Como testar a App no Android:
+1. Instale o **Pydroid 3** a partir da Google Play Store.
+2. No menu Pip do Pydroid 3, instale a biblioteca `kivy`.
+3. Copie o código do ficheiro `main.py` do repositório, cole-o no Pydroid 3 e clique em **Executar (Play)**.
+
+
