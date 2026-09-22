@@ -115,3 +115,60 @@ void devolverDinheiro() {
   }
   atualizarEcra();
 }
+
+
+// 📌 Configuração de Pinos do Hardware (Exemplo Base)
+const int BOTAO_CANCELAR = 2; // Pino do botão de devolução
+const int MOTOR_PRODUTO_1 = 8; // Pino do relé/motor da espiral 1
+
+// ⚙️ Definição dos Estados da Máquina (FSM)
+enum EstadoMaquina {
+  MODO_ESPERA,
+  VALIDACAO_SALDO,
+  VERIFICACAO_STOCK,
+  LIBERTAR_ITEM,
+  DEVOLVER_TROCO
+};
+
+EstadoMaquina estadoAtual = MODO_ESPERA;
+float saldoAtual = 0.0;
+
+void setup() {
+  Serial.begin(9600); // Comunicação com o monitor série
+  
+  // Configuração dos pinos
+  pinMode(BOTAO_CANCELAR, INPUT_PULLUP);
+  pinMode(MOTOR_PRODUTO_1, OUTPUT);
+  digitalWrite(MOTOR_PRODUTO_1, LOW); // Motor desligado inicialmente
+}
+
+void loop() {
+  // Executa a lógica dependendo do estado atual
+  switch (estadoAtual) {
+    case MODO_ESPERA:
+      // Aguarda moedas ou códigos
+      break;
+
+    case VALIDACAO_SALDO:
+      // Atualiza e valida o saldo inserido
+      break;
+
+    case VERIFICACAO_STOCK:
+      // Verifica se o item escolhido está disponível
+      break;
+
+    case LIBERTAR_ITEM:
+      // Ativa o motor da espiral
+      digitalWrite(MOTOR_PRODUTO_1, HIGH);
+      delay(2000); // Simula o tempo de rotação do motor
+      digitalWrite(MOTOR_PRODUTO_1, LOW);
+      estadoAtual = DEVOLVER_TROCO;
+      break;
+
+    case DEVOLVER_TROCO:
+      // Calcula o troco e liberta moedas extras
+      estadoAtual = MODO_ESPERA;
+      break;
+  }
+}
+
