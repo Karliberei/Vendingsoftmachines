@@ -100,3 +100,135 @@ if __name__ == "__main__":
     
     # --- Estado Final da Máquina ---
     maquina.exibir_produtos()
+// 📌 CONFIGURAÇÃO DE PINOS - ARDUINO MEGA
+
+// Pino do moedeiro por pulso (Pino 2 suporta interrupção no Mega)
+const int PINO_MOEDEIRO = 2; 
+
+// Pino do botão de cancelamento/devolução
+const int BOTAO_CANCELAR = 3; 
+
+// Pinos dos relés que controlam os motores das espirais (Produtos 1 a 4)
+const int MOTORES_PRODUTOS[] = {22, 23, 24, 25}; 
+const int TOTAL_PRODUTOS = 4;
+
+// Preços dos produtos (Exemplo: Produto 1 = 1.00€, Produto 2 = 1.50€...)
+const float PRECOS_PRODUTOS[] = {1.00, 1.50, 0.80, 2.00};
+
+// ⚙️ MAQUINA DE ESTADOS FINITOS (FSM)
+enum EstadoMaquina {
+  MODO_ESPERA,
+  VALIDACAO_SALDO,
+  VERIFICACAO_STOCK,
+  LIBERTAR_ITEM,
+  DEVOLVER_TROCO
+};
+
+EstadoMaquina estadoAtual = MODO_ESPERA;
+
+// Variáveis de controlo de saldo e seleção
+volatile int pulsosMoedeiro = 0;
+float saldoAtual = 0.0;
+int produtoSelecionado = -1; // -1 significa nenhuma seleção
+
+// Função de Interrupção para contar moedas (Roda instantaneamente quando entra uma moeda)
+void contarPulsos() {
+  pulsosMoedeiro++;
+}
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("--- Vendingsoftmachines Iniciada (Arduino Mega) ---");
+
+  // Configuração das Entradas
+  pinMode(PINO_MOEDEIRO, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(PINO_MOEDEIRO), contarPulsos, FALLING);
+  
+  pinMode(BOTAO_CANCELAR, INPUT_PULLUP);
+
+  // Configuração das Saídas (Motores das Espirais)
+  for (int i = 0; i < TOTAL_PRODUTOS; i++) {
+    pinMode(MOTORES_PRODUTOS[i], OUTPUT);
+    digitalWrite(MOTORES_PRODUTOS[i], HIGH); // Relés normalmente desligam em HIGH (nível lógico alto)
+  }
+}
+
+void loop() {
+  // 1. Verificar se entraram moedas (Independente do estado)
+  if (pulsosMoedeiro > 0) {
+    // Exemplo: Cada pulso do moedeiro equivale a 0.10€
+    saldoAtual += (pulsosMoedeiro * 0.10);
+    pulsosMoedeiro = 0;
+    estadoAtual = VALIDACAO_SALDO;
+  }
+
+  // 2. Verificar botão de cancelamento
+  if (digitalRead(BOTAO_CANCELAR) == LOW && saldoAtual > 0.0) {
+    Serial.println("Compra cancelada pelo utilizador.");
+    estadoAtual = DEVOLVER_TROCO;
+  }
+
+  // 3. Simulação de seleção via Monitor Série (Digite 0, 1, 2 ou 3 no terminal para testar)
+  if (Serial.available() > 0 && estadoAtual == MODO_ESPERA) {
+    char leitura = Serial.read();
+    if (leitura >= '0' && leitura <= '3') {
+      produtoSelecionado = leitura - '0';
+      estadoAtual = VERIFICACAO_STOCK;
+    }
+  }
+
+  // Lógica da Máquina de Estados
+  switch (estadoAtual) {
+    case MODO_ESPERA:
+      // Apenas aguarda moedas ou comandos do teclado
+      break;
+
+    case VALIDACAO_SALDO:
+      Serial.print("Saldo Atualizado: ");
+      Serial.print(saldoAtual);
+      Serial.println(" EUR");
+      estadoAtual = MODO_ESPERA; // Volta a aguardar após atualizar ecrã
+      break;
+
+    case VERIFICACAO_STOCK:
+      Serial.print("Produto selecionado: ");
+      Serial.println(produtoSelecionado);
+      
+      // Valida se o saldo é suficiente
+      if (saldoAtual >= PRECOS_PRODUTOS[produtoSelecionado]) {
+        Serial.println("Saldo suficiente! A libertar produto...");
+        estadoAtual = LIBERTAR_ITEM;
+      } else {
+        Serial.println("Saldo insuficiente para este produto.");
+        estadoAtual = MODO_ESPERA;
+      }
+      break;
+
+    case LIBERTAR_ITEM:
+      // Desconta o preço do produto
+      saldoAtual -= PRECOS_PRODUTOS[produtoSelecionado];
+      
+      // Liga o motor correspondente (Nível LOW ativa a maioria dos módulos de relé)
+      digitalWrite(MOTORES_PRODUTOS[produtoSelecionado], LOW); 
+      delay(3000); // Roda a espiral durante 3 segundos
+      digitalWrite(MOTORES_PRODUTOS[produtoSelecionado], HIGH); // Desliga o motor
+      
+      Serial.println("Produto entregue com sucesso!");
+      estadoAtual = DEVOLVER_TROCO;
+      break;
+
+    case DEVOLVER_TROCO:
+      if (saldoAtual > 0.0) {
+        Serial.print("A devolver troco: ");
+        Serial.print(saldoAtual);
+        Serial.println(" EUR");
+        // Aqui no futuro controlamos o motor do hopper/devolvedor
+        saldoAtual = 0.0;
+      }
+      produtoSelecionado = -1;
+      estadoAtual = MODO_ESPERA;
+      break;
+  }
+}
+
+
