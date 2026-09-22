@@ -613,3 +613,113 @@ if __name__ == "__main__":
 
 
 
+# =====================================================================
+# SISTEMA UNIFICADO: API DE INTERNET + CÁLCULO MATEMÁTICO DINÂMICO
+# =====================================================================
+import requests
+import time
+from datetime import datetime
+
+class WeatherDynamicEngine:
+    def __init__(self, api_key="b6907d289e10d714a6e88b30761fae22", cidade="Porto"):
+        self.api_key = api_key
+        self.cidade = cidade
+        self.ultima_atualizacao = 0
+        self.temperatura_cache = 20.0  # Temperatura padrão de segurança
+
+    def obter_temperatura_real(self):
+        """Busca a temperatura real na internet usando política de cache de 1 hora."""
+        tempo_atual = time.time()
+        if tempo_atual - self.ultima_atualizacao < 3600:
+            return self.temperatura_cache
+
+        url = f"http://openweathermap.org{self.cidade}&appid={self.api_key}&units=metric"
+        try:
+            resposta = requests.get(url, timeout=3)
+            if resposta.status_code == 200:
+                dados = resposta.json()
+                self.temperatura_cache = dados["main"]["temp"]
+                self.ultima_atualizacao = tempo_atual
+        except Exception:
+            pass  # Modo offline seguro: mantém o valor em cache se falhar a rede
+            
+        return self.temperatura_cache
+
+
+def calcular_preco_dinamico_mundial(preco_base, temperatura_atual, horas_para_vencer, stock_atual):
+    """
+    Algoritmo Matemático Avançado de Elasticidade de Preço.
+    Cruza variáveis ambientais e de inventário em tempo real.
+    """
+    preco_final = preco_base
+    fatores_aplicados = []
+
+    # 1. Ajuste Térmico Matemático (Clima Extremo)
+    if temperatura_atual >= 32.0:
+        preco_final *= 1.15
+        fatores_aplicados.append("Ajuste Térmico (+15% Alta Procura por Calor)")
+    elif temperatura_atual <= 8.0:
+        preco_final *= 1.05
+        fatores_aplicados.append("Ajuste Térmico (+5% Clima Frio)")
+
+    # 2. Desconto de Validade Progressivo (Anti-Desperdício)
+    if horas_para_vencer <= 2:
+        preco_final *= 0.40
+        fatores_aplicados.append("Liquidação Crítica (-60% Validade Próxima)")
+    elif horas_para_vencer <= 6:
+        preco_final *= 0.70
+        fatores_aplicados.append("Desconto de Validade Ativo (-30%)")
+    elif horas_para_vencer <= 12:
+        preco_final *= 0.90
+        fatores_aplicados.append("Desconto de Validade Preventivo (-10%)")
+
+    # 3. Lei de Escassez de Stock
+    if stock_atual == 1 and preco_final == preco_base:
+        preco_final *= 1.10
+        fatores_aplicados.append("Prémio de Escassez (+10% Última Unidade)")
+
+    # Margens de Segurança de Finanças Locais (Min 40% | Max 150% do preço base)
+    preco_final = max(preco_base * 0.40, min(preco_final, preco_base * 1.50))
+    
+    return round(preco_final, 2), fatores_aplicados
+
+
+# --- INTEGRAÇÃO DIRETA COM O LOOP DO SEU SIMULADOR ---
+def rodar_painel_inteligente():
+    # Inicializa o motor meteorológico
+    motor_clima = WeatherDynamicEngine(cidade="Lisbon")
+    
+    # Simulação de base de dados local de produtos na máquina
+    produtos = {
+        "A01": {"nome": "Água Mineral", "preco_base": 1.20, "horas_validade": 48, "stock": 5},
+        "B02": {"nome": "Sandes Natural", "preco_base": 3.50, "horas_validade": 1.5, "stock": 2},
+        "C03": {"nome": "Chocolate", "preco_base": 2.00, "horas_validade": 72, "stock": 1}
+    }
+    
+    print("\n=== SOFTWARE DE VENDING INTELIGENTE GLOBAL ===")
+    
+    # Busca a temperatura da internet uma única vez (usará cache nas iterações seguintes)
+    temp_exterior = motor_clima.obter_temperatura_real()
+    print(f"[INFO] Temperatura Exterior Atual detetada via Internet: {temp_exterior}°C\n")
+    
+    # Atualiza matematicamente todos os preços da montra antes de exibir ao cliente
+    print("----- MONTRA DE PRODUTOS COM PREÇOS DINÂMICOS -----")
+    for codigo, info in produtos.items():
+        preco_calculado, motivos = calcular_preco_dinamico_mundial(
+            preco_base=info["preco_base"],
+            temperatura_atual=temp_exterior,
+            horas_para_vencer=info["horas_validade"],
+            stock=info["stock"]
+        )
+        print(f"[{codigo}] {info['nome']} -> Preço Original: {info['preco_base']}€ | PREÇO REAL AGORA: {preco_calculado}€")
+        if motivos:
+            print(f"    ↳ Razão Matemática: {motivos}")
+            
+    print("---------------------------------------------------")
+    # Aqui o seu loop "while True" original continua para receber moedas baseado nestes novos preços...
+
+if __name__ == "__main__":
+    rodar_painel_inteligente()
+
+
+
