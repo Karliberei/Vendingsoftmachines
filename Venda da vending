@@ -172,3 +172,146 @@ void loop() {
   }
 }
 
+import asyncio
+import logging
+import uuid
+from enum import Enum
+
+# Configuração de Logs de Alta Precisão para Auditoria Científica
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] (%(threadName)s) %(message)s")
+
+class MachineState(Enum):
+    IDLE = 1
+    PRODUCT_SELECTION = 2
+    AWAITING_PAYMENT = 3
+    DISPENSING = 4
+    TRANSACTION_COMPLETE = 5
+    FAULT = 6
+
+class VendingCoreSystem:
+    def __init__(self):
+        self.state = MachineState.IDLE
+        self.current_transaction_id = None
+        self.hardware_queue = asyncio.Queue()  # Canal de comunicação ICP/MDB -> Core
+        self.network_queue = asyncio.Queue()   # Canal de comunicação Core -> API/Cloud
+
+    async def mdb_hardware_loop(self):
+        """
+        Isolamento de Baixo Nível: Simula o polling contínuo do bus série MDB.
+        Lê interrupções físicas (botões, moedeiros, sensores de queda) sem bloquear a CPU.
+        """
+        logging.info("MDB Hardware Loop iniciado com polling a 9600 baud (simulado).")
+        while True:
+            # Em produção, isto lerá buffers de portas série (ex: pyserial-asyncio)
+            await asyncio.sleep(0.1)  # Polling rate de 100ms para evitar starvation
+            
+            # Exemplo de evento detetado: Utilizador pressionou o botão do produto 'A01'
+            if self.state == MachineState.IDLE:
+                event = {"type": "HARDWARE_PRESS", "payload": "A01"}
+                await self.hardware_queue.put(event)
+                # Alteramos o estado para evitar múltiplas leituras concorrentes do mesmo botão
+                self.state = MachineState.PRODUCT_SELECTION 
+
+    async def financial_transaction_worker(self, tx_id: str, amount: float):
+        """
+        Tratador Assíncrono I/O Bound para transações financeiras na Cloud.
+        Isola a latência da rede WAN (3G/4G/5G) das operações físicas da máquina.
+        """
+        logging.info(f"[TX: {tx_id}] A iniciar comunicação com o Gateway de Pagamento...")
+        try:
+            # Simulação de latência de rede variável de uma API bancária externa
+            await asyncio.sleep(1.8) 
+            
+            # Garantia atómica de sucesso do pagamento
+            payment_success = True 
+            
+            if payment_success:
+                logging.info(f"[TX: {tx_id}] Pagamento Aprovado pelo Gateway.")
+                return True
+            else:
+                logging.warning(f"[TX: {tx_id}] Pagamento Recusado.")
+                return False
+        except Exception as e:
+            logging.error(f"[TX: {tx_id}] Erro crítico de rede: {e}")
+            return False
+
+    async def central_orchestrator(self):
+        """
+        A Máquina de Estados Central (FSM).
+        Consome os eventos de hardware de forma puramente não bloqueante.
+        """
+        logging.info("Orquestrador Central FSM iniciado.")
+        while True:
+            # Aguarda o próximo evento de hardware na fila de forma assíncrona
+            event = await self.hardware_queue.get()
+            logging.info(f"Evento recebido no Core: {event['type']} | Estado Atual: {self.state.name}")
+
+            if event["type"] == "HARDWARE_PRESS" and self.state == MachineState.PRODUCT_SELECTION:
+                product_code = event["payload"]
+                self.current_transaction_id = str(uuid.uuid4())
+                self.state = MachineState.AWAITING_PAYMENT
+                
+                # Despara o worker financeiro em background (Concorrência Pura)
+                # O loop continua livre para monitorizar o hardware enquanto a rede responde
+                asyncio.create_task(self.process_sale(self.current_transaction_id, product_code))
+                
+            self.hardware_queue.task_done()
+
+    async def process_sale(self, tx_id: str, product_code: str):
+        """
+        Pipeline concorrente de venda. Gere o ciclo de vida completo de uma transação.
+        """
+        price = 2.50 # Simulação de custo obtido de uma DB em memória
+        
+        # Aguarda a resposta do gateway financeiro sem congelar os sensores da máquina
+        payment_approved = await self.financial_transaction_worker(tx_id, price)
+        
+        if payment_approved:
+            self.state = MachineState.DISPENSING
+            logging.info(f"[TX: {tx_id}] Ativando motor de passo para libertar produto {product_code}...")
+            
+            # Pulso elétrico para o motor da espiral (MDB command)
+            await asyncio.sleep(0.5) 
+            
+            # Sensor ótico infravermelho valida a queda do produto
+            product_dropped = True 
+            
+            if product_dropped:
+                self.state = MachineState.TRANSACTION_COMPLETE
+                logging.info(f"[TX: {tx_id}] Venda concluída com sucesso absoluto. Produto entregue.")
+            else:
+                self.state = MachineState.FAULT
+                logging.critical(f"[TX: {tx_id}] FALHA CRÍTICA: Motor rodou mas o produto não caiu. Iniciando estorno automático...")
+                # Aqui entraria a chamada assíncrona para reverter o pagamento (Refund API)
+        else:
+            logging.error(f"[TX: {tx_id}] Transação abortada. Notificando ecrã da máquina.")
+            
+        # Reset do estado para o ciclo seguinte
+        await asyncio.sleep(1.0)
+        self.state = MachineState.IDLE
+        self.current_transaction_id = None
+
+    async def telemetry_cloud_sync_loop(self):
+        """
+        Pipeline de Telemetria Secundário. 
+        Envia logs e métricas de saúde para a cloud em batch de forma assíncrona.
+        """
+        while True:
+            await asyncio.sleep(5.0) # Sincronização a cada 5 segundos
+            # Padrão Fire-and-Forget: Envia o estado atual da máquina e métricas térmicas
+            logging.info(f"[TELEMETRIA] Sincronizando estado operacional ({self.state.name}) com cluster central.")
+
+    async def main(self):
+        # Dispara todas as corrotinas concorrentes no loop de eventos global do Python
+        await asyncio.gather(
+            self.mdb_hardware_loop(),
+            self.central_orchestrator(),
+            self.telemetry_cloud_sync_loop()
+        )
+
+if __name__ == "__main__":
+    system = VendingCoreSystem()
+    try:
+        asyncio.run(system.main())
+    except KeyboardInterrupt:
+        logging.info("Sistema encerrado de forma segura.")
