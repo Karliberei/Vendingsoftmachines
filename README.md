@@ -33,3 +33,33 @@ O software foi desenvolvido seguindo o modelo de uma **Máquina de Estados Finit
 * [ ] Adicionar suporte ao protocolo MDB (Multi-Drop Bus) para moedeiros industriais.
 * [x] Criar um sistema automático de faturação que exporta as vendas diárias para um ficheiro .csv. (Concluído no ficheiro 'Venda da vending' ✅)
 
+* [ ] ## 🚀 Como Executar o Simulador Python
+
+Para testar a lógica da máquina de estados no seu computador, siga os passos abaixo:
+
+### 1. Pré-requisitos
+Certifique-se de que tem o **Python 3** instalado no seu computador. Pode descarregá-lo em [python.org](https://python.org).
+
+### 2. Instalação
+1. Descarregue o código fonte da última [Release](https://github.com).
+2. Extraia o ficheiro `.zip` para uma pasta à sua escolha.
+3. Abra o **Terminal** (Linux/Mac) ou **Prompt de Comando/PowerShell** (Windows) e navegue até à pasta extraída:
+   ```bash
+   cd Caminho/Para/A/Pasta/Vendingsoftmachines
+   ```
+
+### 3. Execução
+Execute o script principal utilizando o comando correspondente ao seu sistema operativo:
+
+* **Windows:**
+  ```cmd
+  python "Venda da vending.py"
+  ```
+* **Linux / macOS:**
+  ```bash
+  python3 "Venda da vending.py"
+  ```
+
+O simulador irá iniciar um loop contínuo (painel interativo) no seu terminal, onde poderá testar a inserção de moedas, seleção de produtos e faturação.
+
+
