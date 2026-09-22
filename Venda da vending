@@ -464,3 +464,89 @@ def iniciar_sistema_assincrono():
     except KeyboardInterrupt:
         logging.info("Sistema encerrado de forma segura.")
 
+
+import asyncio
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.clock import Clock
+
+# Injetando o Core da sua Máquina de Estados Assíncrona
+class VendingEngine:
+    def __init__(self):
+        self.saldo = 0.0
+        self.estado = "IDLE"
+
+    async def inserir_moeda_async(self, valor):
+        self.estado = "PROCESSING_PAYMENT"
+        await asyncio.sleep(0.5) # Simula o tempo de validação física do moedeiro
+        self.saldo += valor
+        self.estado = "IDLE"
+        return self.saldo
+
+    async def despachar_produto_async(self, codigo):
+        if self.saldo >= 1.50: # Preço fixo simulado para teste
+            self.estado = "DISPENSING"
+            await asyncio.sleep(1.5) # Simula o motor de passo MDB a rodar
+            self.saldo -= 1.50
+            self.estado = "TRANSACTION_COMPLETE"
+            await asyncio.sleep(1.0)
+            self.estado = "IDLE"
+            return True, "Produto Entregue com Sucesso!"
+        return False, "Saldo Insuficiente!"
+
+class VendingAndroidApp(App):
+    def build(self):
+        self.engine = VendingEngine()
+        self.layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
+        
+        # Elementos do Ecrã da Máquina (UI)
+        self.status_label = Label(text="ESTADO: IDLE", font_size='20sp', size_hint_y=None, height=50)
+        self.saldo_label = Label(text="SALDO: 0.00 €", font_size='32sp', color=[0, 1, 0, 1])
+        
+        # Botões de Interação
+        btn_moeda = Button(text="Inserir Moeda de 1.00 €", size_hint_y=None, height=60, background_color=[0.2, 0.6, 1, 1])
+        btn_moeda.bind(on_press=lambda x: self.run_async(self.inserir_moeda(1.00)))
+        
+        btn_comprar = Button(text="Comprar Produto (1.50 €)", size_hint_y=None, height=60, background_color=[1, 0.4, 0.4, 1])
+        btn_comprar.bind(on_press=lambda x: self.run_async(self.comprar_produto("A01")))
+        
+        # Montagem do Layout
+        self.layout.add_widget(self.status_label)
+        self.layout.add_widget(self.saldo_label)
+        self.layout.add_widget(btn_moeda)
+        self.layout.add_widget(btn_comprar)
+        
+        # Loop de atualização da UI acoplado ao Kivy
+        Clock.schedule_interval(self.update_ui, 0.1)
+        return self.layout
+
+    def run_async(self, coro):
+        """Garante que a tarefa roda de forma não bloqueante na App"""
+        asyncio.ensure_future(coro)
+
+    async def inserir_moeda(self, valor):
+        novo_saldo = await self.engine.inserir_moeda_async(valor)
+        self.saldo_label.text = f"SALDO: {novo_saldo:.2f} €"
+
+    async def comprar_produto(self, codigo):
+        sucesso, msg = await self.engine.despachar_produto_async(codigo)
+        if sucesso:
+            self.saldo_label.text = f"SALDO: {self.engine.saldo:.2f} €"
+        # Temporariamente muda o ecrã para avisar o cliente
+        self.status_label.text = msg
+
+    def update_ui(self, dt):
+        """Mantém o ecrã atualizado com o estado real do Core do Software"""
+        if self.engine.estado != "TRANSACTION_COMPLETE":
+            self.status_label.text = f"ESTADO: {self.engine.estado}"
+
+    def on_start(self):
+        """Inicializa o Loop de Eventos do Asyncio em paralelo com a App"""
+        self.loop = asyncio.get_event_loop()
+        
+if __name__ == '__main__':
+    VendingAndroidApp().run()
+
+
