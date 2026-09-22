@@ -292,3 +292,91 @@ log_level = 2
 warn_on_root = 1
 
 
+
+import asyncio
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.clock import Clock
+
+# IMPORTAÇÃO ESTRUTURAL: Ligação direta ao motor contido na pasta Vending
+from Vending.vending_core import VendingCoreSystem, MachineState
+
+class VendingAndroidApp(App):
+    def build(self):
+        # 1. Inicializa o Core Científico de Hardware e Transações
+        self.vending_core = VendingCoreSystem()
+        
+        # 2. Configuração da Interface Visual (UI)
+        self.layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
+        
+        self.status_label = Label(text="ESTADO: IDLE", font_size='20sp', size_hint_y=None, height=50)
+        self.saldo_label = Label(text="SALDO: 0.00 €", font_size='32sp', color=[0.2, 0.8, 0.2, 1])
+        
+        # Botões de Entrada de Dados Físicos (Simulação MDB)
+        btn_inserir_moeda = Button(text="Inserir Moeda de 1.00 € (Via MDB)", size_hint_y=None, height=60)
+        # Ao clicar, injetamos o sinal diretamente na fila de hardware do Core
+        btn_inserir_moeda.bind(on_press=lambda x: self.run_async(self.simular_evento_hardware("MOEDA_100")))
+        
+        btn_selecionar_produto = Button(text="Selecionar Produto A01 (Ecrã Tátil)", size_hint_y=None, height=60, background_color=[1, 0.4, 0.4, 1])
+        btn_selecionar_produto.bind(on_press=lambda x: self.run_async(self.simular_evento_hardware("HARDWARE_PRESS")))
+        
+        # Montagem do Layout do Kiosk Android
+        self.layout.add_widget(self.status_label)
+        self.layout.add_widget(self.saldo_label)
+        self.layout.add_widget(btn_inserir_moeda)
+        self.layout.add_widget(btn_selecionar_produto)
+        
+        # 3. Agenda o loop de atualização periódica da UI para ler o estado do Core
+        Clock.schedule_interval(self.sincronizar_estados_ui, 0.05) # Refresh rate de 50ms (ultra-responsivo)
+        
+        return self.layout
+
+    def run_async(self, coro):
+        """Disparador atómico de tarefas assíncronas sem congelar os frames da UI."""
+        asyncio.ensure_future(coro)
+
+    async def simular_evento_hardware(self, tipo_evento):
+        """Injeta eventos assíncronos diretamente na fila do cérebro mecânico."""
+        if tipo_evento == "HARDWARE_PRESS":
+            event = {"type": "HARDWARE_PRESS", "payload": "A01"}
+            await self.vending_core.hardware_queue.put(event)
+        elif tipo_evento == "MOEDA_100":
+            # Aqui podemos mais tarde ligar à função do seu código antigo de acumular moedas
+            event = {"type": "COIN_INSERTED", "payload": 1.00}
+            await self.vending_core.hardware_queue.put(event)
+
+    def sincronizar_estados_ui(self, dt):
+        """
+        Ponte de Sincronização: Lê em tempo real as variáveis atómicas do
+        `vending_core` e reflete imediatamente as mudanças no ecrã Android.
+        """
+        # Atualiza a string do estado atual baseado na FSM do ficheiro vending_core.py
+        estado_atual = self.vending_core.state.name
+        self.status_label.text = f"ESTADO DO SISTEMA: {estado_atual}"
+        
+        # Altera cores dinamicamente no ecrã com base no processamento crítico
+        if estado_atual == "DISPENSING":
+            self.status_label.color = [1, 0.6, 0, 1] # Cor de alerta (Laranja - Motor a rodar)
+        elif estado_atual == "TRANSACTION_COMPLETE":
+            self.status_label.color = [0, 1, 0, 1] # Sucesso (Verde - Produto entregue)
+        elif estado_atual == "FAULT":
+            self.status_label.color = [1, 0, 0, 1] # Erro Crítico (Vermelho)
+        else:
+            self.status_label.color = [1, 1, 1, 1] # Padrão (Branco)
+
+    def on_start(self):
+        """
+        Inicialização do Sistema Híbrido.
+        Acopla as tarefas de segundo plano do motor MDB e da telemetria
+        diretamente ao ciclo de vida da aplicação Kivy no Android.
+        """
+        asyncio.ensure_future(self.vending_core.mdb_hardware_loop())
+        asyncio.ensure_future(self.vending_core.central_orchestrator())
+        asyncio.ensure_future(self.vending_core.telemetry_cloud_sync_loop())
+
+if __name__ == '__main__':
+    VendingAndroidApp().run()
+
+
