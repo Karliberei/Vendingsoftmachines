@@ -380,3 +380,72 @@ if __name__ == '__main__':
     VendingAndroidApp().run()
 
 
+# =====================================================================
+# EXTENSÃO DE CONECTIVIDADE: INTEGRAÇÃO COM API METEOROLÓGICA REAL
+# =====================================================================
+import requests
+import time
+
+class WeatherDynamicEngine:
+    def __init__(self, api_key="SUA_API_KEY_AQUI", cidade="Lisbon"):
+        self.api_key = api_key
+        self.cidade = cidade
+        self.ultima_atualizacao = 0
+        self.temperatura_cache = 20.0  # Temperatura padrão de segurança caso falte internet
+
+    def obter_temperatura_real_da_internet(self):
+        """
+        Conecta à API do OpenWeatherMap para buscar o clima local real.
+        Implementa uma política de cache de 1 hora (3600 segundos) para mitigar overhead.
+        """
+        tempo_atual = time.time()
+        
+        # Se passou menos de 1 hora desde a última consulta, usa o valor guardado em memória
+        if tempo_atual - self.ultima_atualizacao < 3600:
+            return self.temperatura_cache
+
+        # URL endpoint oficial do OpenWeatherMap
+        url = f"http://api.openweathermap.org/data/2.5/weather?q={self.cidade}&appid={self.api_key}&units=metric"
+        
+        try:
+            # Faz a chamada HTTP síncrona com timeout de segurança de 3 segundos
+            resposta = requests.get(url, timeout=3)
+            
+            if resposta.status_code == 200:
+                dados = resposta.json()
+                self.temperatura_cache = dados["main"]["temp"]
+                self.ultima_atualizacao = tempo_atual
+                print(f"[INTERNET] Sucesso. Clima atualizado para {self.cidade}: {self.temperatura_cache}°C")
+            else:
+                print(f"[INTERNET] Erro na API ({resposta.status_code}). Usando temperatura em cache: {self.temperatura_cache}°C")
+        except Exception as e:
+            # Tolerância a falhas: se a máquina perder o Wi-Fi/4G, o sistema não crasha
+            print(f"[INTERNET] Falha de conexão à rede: {e}. Mantendo modo offline seguro.")
+            
+        return self.temperatura_cache
+
+# --- EXEMPLO DE ENCAIXE NO SEU LOOP WHILE TRUE ---
+def executar_simulador_com_internet():
+    # Inicializa o motor de internet (Registe-se gratuitamente em openweathermap.org para obter uma chave)
+    motor_clima = WeatherDynamicEngine(api_key="b6907d289e10d714a6e88b30761fae22", cidade="Porto")
+    
+    print("Iniciando Painel de Vending Inteligente...")
+    # Loop idêntico ao que já possui no ficheiro 'Venda da vending'
+    limite_testes = 0 
+    while limite_testes < 3: 
+        # 1. Busca a temperatura real da internet (usa cache automaticamente)
+        temp_atual = motor_clima.obter_temperatura_real_da_internet()
+        
+        # 2. Exibe no ecrã da máquina o fator ambiental descoberto na web
+        print(f"\n[ECRÃ MÁQUINA] Temperatura Exterior Atual: {temp_atual}°C")
+        print("1. Selecionar Produto | 2. Inserir Moeda | 3. Sair")
+        
+        # Aqui corre o resto da sua lógica original de moedas e venda...
+        time.sleep(1)
+        limite_testes += 1
+
+if __name__ == "__main__":
+    executar_simulador_com_internet()
+
+
+
