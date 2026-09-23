@@ -21,3 +21,7 @@ COPY . .
 
 # 7. Define o ponto de entrada único e confiável para iniciar o simulador/controlador
 CMD ["python", "Venda da vending.py"]
+pyserial==3.5
+
+
+docker run -d --device=/dev/ttyUSB0:/dev/ttyUSB0 vending-app
