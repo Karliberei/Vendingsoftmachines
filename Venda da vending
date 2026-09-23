@@ -952,4 +952,27 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+import requests
 
+# Código fictício dentro do loop da máquina após a venda ter sucesso
+dados_venda = {"produto_id": "A1", "valor_pago": 1.50}
+try:
+    requests.post("http://IP_DO_SEU_SERVIDOR:8000/api/venda", json=dados_venda)
+except requests.exceptions.RequestException:
+    print("Erro ao enviar dados ao servidor. Guardado em cache local.")
+
+Vendingsoftmachines/
+│
+├── .github/workflows/      # Automação CI/CD
+├── src_maquina/            # Onde coloca o que já tem feito
+│   ├── Venda da vending.py # O simulador da máquina
+│   └── Vending/            # Lógica C++/Arduino
+│
+├── src_servidor/           # O NOVO CÓDIGO (Painel do Operador)
+│   ├── server.py           # O script FastAPI que criámos acima
+│   ├── requirements.txt    # Contendo: fastapi, uvicorn, requests
+│   └── vending_operator.db # Base de dados gerada automaticamente
+│
+├── Dockerfile              # Já existente (ajustar para apontar para o src_servidor/server.py)
+├── fly.toml                # Configuração de Deploy (ex: Fly.io)
+└── README.md               # Documentação atualizada
