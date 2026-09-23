@@ -80,3 +80,10 @@ def obter_dashboard(data_inicio: str = None, data_fim: str = None):
         "alertas_reposicao": alertas_stock,
         "exportar_fisco_saf_t": "Simulação de ficheiro XML/SAFT-PT pronto para exportação."
     }
+
+
+
+git add src_servidor/
+git commit -m "feat: adicionar servidor de monitorização de stocks e faturação para o operador"
+git push origin main
+
