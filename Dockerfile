@@ -45,5 +45,39 @@ CMD ["python", "app.py"]
 docker run -d --device=/dev/ttyUSB0:/dev/ttyUSB0 vending-app
 
 
+# src/main.py
+import asyncio
+from hardware.mdb import MDBController
+
+# Instancia o controlador (ajuste a porta conforme o seu hardware)
+mdb = MDBController(port='/dev/ttyUSB0')
+mdb.conectar()
+
+saldo_atual = 0.0
+
+async def mdb_polling_task():
+    """Tarefa em segundo plano que corre junto com o Kivy/Asyncio"""
+    global saldo_atual
+    while True:
+        # Executa de forma assíncrona sem travar o ecrã
+        valor_inserido = mdb.verificar_moedas()
+        
+        if valor_inserido:
+            saldo_atual += valor_inserido
+            print(f"🪙 Saldo Atualizado: {saldo_atual}€")
+            # Aqui aciona a função da sua FSM para atualizar o ecrã do Kivy
+            # exemplo: app.root.atualizar_ecran_saldo(saldo_atual)
+            
+        # Pausa recomendada de 200ms do protocolo MDB
+        await asyncio.sleep(0.2)
+
+# No método de inicialização da sua App (onde usa o asyncio.ensure_future):
+# asyncio.ensure_future(mdb_polling_task())
+
+docker run -d --device=/dev/ttyUSB0:/dev/ttyUSB0 vending-app
+
+
+
+
 
 
