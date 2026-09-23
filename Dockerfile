@@ -78,6 +78,7 @@ docker run -d --device=/dev/ttyUSB0:/dev/ttyUSB0 vending-app
 
 
 
+python "Venda da vending.py"
 
 
 
