@@ -81,4 +81,73 @@ docker run -d --device=/dev/ttyUSB0:/dev/ttyUSB0 vending-app
 python "Venda da vending.py"
 
 
+from telemetry import report_sale_to_cloud, report_stock_alert
+
+
+import asyncio
+import aiohttp
+import logging
+from decimal import Decimal
+from datetime import datetime
+
+logger = logging.getLogger("VendingTelemetry")
+
+# URL do servidor central de telemetria (substitua pelo seu endpoint de produção/Fly.io)
+TELEMETRY_ENDPOINT = "https://vendingsoftmachines.com"
+
+async def send_telemetry_event(payload: dict) -> bool:
+    """
+    Envia um payload JSON de forma assíncrona para o servidor central.
+    Garante que falhas de rede na nuvem não quebrem o funcionamento físico da máquina.
+    """
+    try:
+        # Timeout curto para evitar que conexões presas consumam memória no Android
+        timeout = aiohttp.ClientTimeout(total=5.0)
+        
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(TELEMETRY_ENDPOINT, json=payload) as response:
+                if response.status == 200 or response.status == 201:
+                    logger.info(f"📊 Telemetria enviada com sucesso: {payload.get('event_type')}")
+                    return True
+                else:
+                    logger.warning(f"⚠️ Servidor rejeitou telemetria. Status: {response.status}")
+                    return False
+    except asyncio.TimeoutError:
+        logger.error("❌ Timeout ao tentar contactar o servidor de telemetria (Rede lenta).")
+        return False
+    except Exception as e:
+        # Importante: Captura falhas de falta de internet sem deitar a máquina abaixo
+        logger.error(f"❌ Falha crítica de rede na telemetria: {e}")
+        return False
+
+# Funções auxiliares especializadas que o motor da máquina vai chamar
+async def report_sale_to_cloud(machine_id: str, code: str, name: str, price: Decimal):
+    """Notifica a nuvem sobre uma venda bem-sucedida"""
+    payload = {
+        "machine_id": machine_id,
+        "event_type": "SALE",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "data": {
+            "slot": code,
+            "product_name": name,
+            "amount_paid": str(price)
+        }
+    }
+    # Dispara em background para não fazer o cliente esperar no ecrã
+    asyncio.create_task(send_telemetry_event(payload))
+
+async def report_stock_alert(machine_id: str, code: str, name: str):
+    """Alerta imediatamente a central se um produto esgotar para gerar rota de reposição"""
+    payload = {
+        "machine_id": machine_id,
+        "event_type": "STOCK_ALERT",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "data": {
+            "slot": code,
+            "product_name": name,
+            "status": "OUT_OF_STOCK"
+        }
+    }
+    # Envia imediatamente
+    asyncio.create_task(send_telemetry_event(payload))
 
