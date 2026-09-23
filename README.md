@@ -82,3 +82,23 @@ O ecossistema foi expandido para suportar uma interface gráfica nativa em dispo
 > **Looking for Vending Machine software? Buy it from me!**
 > 📩 Contact: [vendingsoftmachines@outlook.pt](mailto:vendingsoftmachines@outlook.pt)
 
+
+
+
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Instala dependências do sistema (se necessário para a comunicação serial)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/ .
+
+# Comando de arranque único e confiável
+CMD ["python", "main.py"]
+
