@@ -742,4 +742,16 @@ Vendingsoftmachines/
 
 
 
+import os
+from dotenv import load_dotenv
+
+# Carrega as variáveis do ficheiro .env oculto
+load_dotenv()
+
+# Agora pode usar as variáveis de forma segura no software da máquina
+porta_serial = os.getenv("SERIAL_PORT_LINUX", "/dev/ttyUSB0")
+db_password = os.getenv("DB_PASSWORD")
+
+print(f"[*] A conectar à porta: {porta_serial}")
+# O robô ou invasores nunca vão ver a sua 'db_password' no GitHub!
 
