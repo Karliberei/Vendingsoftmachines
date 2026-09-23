@@ -22,6 +22,28 @@ COPY . .
 # 7. Define o ponto de entrada único e confiável para iniciar o simulador/controlador
 CMD ["python", "Venda da vending.py"]
 pyserial==3.5
+# Usa una imagen oficial de Python
+FROM python:3.10-slim
+
+# Define el directorio de trabajo
+WORKDIR /app
+
+# Copia los requisitos e instala las dependencias
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copia el resto del código
+COPY . .
+
+# Expone el puerto (ajusta según lo que use tu app o el servidor)
+EXPOSE 8080
+
+# Arranca la aplicación (asegúrate de usar la variable de entorno PORT si el servidor lo pide)
+CMD ["python", "app.py"]
 
 
 docker run -d --device=/dev/ttyUSB0:/dev/ttyUSB0 vending-app
+
+
+
+
