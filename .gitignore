@@ -8,3 +8,39 @@ node_modules
 .psci
 output
 CMD ["python", "main.py"]
+# Configurações de Ambiente e Credenciais (Segurança)
+.env
+.env.local
+.env.*.local
+
+# Ficheiros de dados locais gerados em testes
+*.db
+*.sqlite
+# =================================================================
+# CONFIGURAÇÕES DA VENDING MACHINE (MODELO)
+# Copie este ficheiro para .env e coloque os valores reais locais.
+# =================================================================
+
+# Configurações da App & API (Fly.io / Docker)
+APP_ENV=development
+API_SECRET_KEY=coloque_aqui_uma_chave_secreta_longa
+
+# Configurações de Hardware / Portas Seriais (MDB/Arduino)
+SERIAL_PORT_WINDOWS=COM3
+SERIAL_PORT_LINUX=/dev/ttyUSB0
+BAUD_RATE=9600
+
+# Base de Dados para Faturação e Telemetria
+DB_HOST=localhost
+DB_USER=vending_user
+DB_PASSWORD=mudar_para_uma_senha_forte
+DB_NAME=vending_db
+
+APP_ENV=production
+API_SECRET_KEY=9a8b7c6d5e4f3g2h1i0j_vending_secure_prod
+SERIAL_PORT_LINUX=/dev/ttyAMA0
+DB_HOST=sua-base-de-dados.flycast
+DB_USER=admin_vending
+DB_PASSWORD=SuperSenhaSegura2026!
+DB_NAME=vending_production
+
