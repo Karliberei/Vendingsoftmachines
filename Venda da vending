@@ -755,3 +755,201 @@ db_password = os.getenv("DB_PASSWORD")
 print(f"[*] A conectar à porta: {porta_serial}")
 # O robô ou invasores nunca vão ver a sua 'db_password' no GitHub!
 
+
+import asyncio
+import logging
+from decimal import Decimal, ROUND_HALF_UP
+from enum import Enum
+from pathlib import Path
+from typing import Dict, Any, Optional
+
+# Configuração robusta de logging para evitar exceções silenciosas
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] (%(threadName)s) %(message)s",
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger("VendingEngine")
+
+
+class State(Enum):
+    """Estados Finitos da Vending Machine (FSM)"""
+    IDLE = "Aguardar Moedas / Seleção"
+    VALIDATING = "A validar Saldo e Stock"
+    DISPENSING = "A dispensar Produto"
+    REFUNDING = "A devolver Saldo"
+
+
+class VendingMachine:
+    def __init__(self, db_path: str = "vending_state.json", csv_path: str = "vendas_diarias.csv"):
+        self.db_path = Path(db_path)
+        self.csv_path = Path(csv_path)
+        
+        # Lógica de Concorrência: Trinca para isolar mutações de estado/saldo
+        self._lock = asyncio.Lock()
+        
+        # Inicialização básica de Estado e Inventário
+        self.state: State = State.IDLE
+        self.balance: Decimal = Decimal("0.00")  # Resolução do Bug #5 (Ponto Flutuante)
+        
+        self.products: Dict[str, Dict[str, Any]] = {
+            "A1": {"name": "Café Expresso", "price": Decimal("0.65"), "stock": 10},
+            "B2": {"name": "Água Mineral", "price": Decimal("1.00"), "stock": 5},
+            "C3": {"name": "Snack de Chocolate", "price": Decimal("1.50"), "stock": 0}, # Sem stock para teste
+        }
+        
+        # Tenta recuperar dados caso a máquina tenha ido abaixo (Bug #4)
+        self._load_persisted_state()
+
+    def _load_persisted_state(self):
+        """Recupera o estado volátil em caso de falha de energia"""
+        try:
+            if self.db_path.exists():
+                import json
+                with open(self.db_path, "r") as f:
+                    data = json.load(f)
+                    self.balance = Decimal(data.get("balance", "0.00"))
+                logger.info(f"⚡ Estado recuperado após reinicialização. Saldo: {self.balance}€")
+        except Exception as e:
+            logger.error(f"Erro ao carregar estado persistido: {e}")
+
+    def _persist_state(self):
+        """Guarda o saldo atual de forma atómica na persistência local"""
+        try:
+            import json
+            temp_path = self.db_path.with_suffix(".tmp")
+            with open(temp_path, "w") as f:
+                json.dump({"balance": str(self.balance)}, f)
+            temp_path.replace(self.db_path)  # Substituição atómica no SO
+        except Exception as e:
+            logger.error(f"Erro Crítico ao persistir estado: {e}")
+
+    async def insert_coin(self, amount: Decimal) -> Decimal:
+        """Insere moedas com segurança de concorrência e precisão monetária"""
+        valid_coins = {Decimal("0.05"), Decimal("0.10"), Decimal("0.20"), Decimal("0.50"), Decimal("1.00"), Decimal("2.00")}
+        
+        if amount not in valid_coins:
+            logger.warning(f"Moeda inválida rejeitada: {amount}€")
+            return self.balance
+
+        async with self._lock:  # Evita race conditions ao atualizar saldo
+            if self.state != State.IDLE:
+                logger.warning("Máquina ocupada. Moeda devolvida.")
+                return self.balance
+                
+            self.balance += amount
+            self._persist_state()
+            logger.info(f"🪙 Moeda inserida: {amount}€ | Saldo Atual: {self.balance}€")
+            return self.balance
+
+    async def select_product(self, code: str):
+        """Valida, processa o pagamento e despacha o produto assincronamente"""
+        async with self._lock:  # Trinca impede ações concorrentes (Bug #1)
+            if self.state != State.IDLE:
+                logger.warning("Operação em curso. Aguarde.")
+                return
+
+            self.state = State.VALIDATING
+            product = self.products.get(code)
+
+            # Verificação Dupla de Segurança
+            if not product:
+                logger.error(f"Código incorreto: {code}")
+                self.state = State.IDLE
+                return
+
+            if product["stock"] <= 0:
+                logger.warning(f"Produto esgotado: {product['name']}")
+                self.state = State.IDLE
+                return
+
+            if self.balance < product["price"]:
+                logger.warning(f"Saldo insuficiente para {product['name']} ({product['price']}€). Saldo: {self.balance}€")
+                self.state = State.IDLE
+                return
+
+            # Transição para dispensa de hardware simulada
+            self.state = State.DISPENSING
+            try:
+                # Executa a escrita de faturação e dispensa de forma não bloqueante (Bug #2)
+                await self._dispense_hardware_simulation(code, product)
+                
+                # Dedução do saldo e atualização de stock
+                change = self.balance - product["price"]
+                product["stock"] -= 1
+                self.balance = Decimal("0.00")
+                self._persist_state()
+                
+                # Faturação síncrona delegada a uma Thread Pool para não congelar o Event Loop (Bug #2)
+                await asyncio.to_thread(self._log_sale_to_csv, code, product["name"], product["price"])
+                
+                logger.info(f"✅ Sucesso: {product['name']} entregue! Seu troco: {change}€")
+                
+            except Exception as error:
+                # Captura de exceções (Bug #3) - reverte o estado da máquina de forma segura
+                logger.critical(f"Falha crítica no hardware de dispensa: {error}")
+                # Devolve o estado para IDLE mantendo o saldo do cliente intacto
+                
+            finally:
+                self.state = State.IDLE
+
+    async def _dispense_hardware_simulation(self, code: str, product: Dict[str, Any]):
+        """Simula ativação de relés/motores físicos via I/O assíncrono"""
+        logger.info(f"⚙️ Ativando motor da espiral [{code}] para libertar {product['name']}...")
+        await asyncio.sleep(2.0)  # Não bloqueia a UI (Kivy) nem outras corrotinas do asyncio
+
+    def _log_sale_to_csv(self, code: str, name: str, price: Decimal):
+        """Escreve as vendas diárias num ficheiro .csv (I/O Síncrono Seguro fora do loop principal)"""
+        import csv
+        from datetime import datetime
+        
+        file_exists = self.csv_path.exists()
+        with open(self.csv_path, mode="a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["Data/Hora", "Código", "Produto", "Valor Pago"])
+            writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), code, name, str(price)])
+        logger.info("📊 Faturação gravada com sucesso em cache CSV.")
+
+    async def trigger_refund(self) -> Decimal:
+        """Devolve 100% do saldo acumulado de forma segura e limpa a persistência"""
+        async with self._lock:
+            if self.state != State.IDLE:
+                logger.warning("Não é possível solicitar reembolso durante o processamento de um produto.")
+                return Decimal("0.00")
+                
+            if self.balance == 0:
+                return Decimal("0.00")
+                
+            self.state = State.REFUNDING
+            refunded_amount = self.balance
+            logger.info(f"🔄 Reembolso acionado. Devolvendo {refunded_amount}€ ao cliente...")
+            
+            # Hardware simulation de devolução de moedas
+            await asyncio.sleep(1.0)
+            
+            self.balance = Decimal("0.00")
+            self._persist_state()
+            self.state = State.IDLE
+            return refunded_amount
+
+
+# --- Bloco de Teste de Stress do Motor Assíncrono ---
+async def main():
+    machine = VendingMachine()
+    
+    # 1. Teste de precisão monetária (Bug 5)
+    await machine.insert_coin(Decimal("0.50"))
+    await machine.insert_coin(Decimal("0.10"))
+    await machine.insert_coin(Decimal("0.05")) # Saldo acumulado: 0.65€ exactos
+    
+    # 2. Teste de proteção de concorrência / Race condition (Bug 1 e Bug 3)
+    # Tenta comprar e pedir reembolso simultaneamente para testar o isolamento das trincas
+    await asyncio.gather(
+        machine.select_product("A1"),
+        machine.trigger_refund()
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
