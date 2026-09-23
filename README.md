@@ -77,4 +77,8 @@ O ecossistema foi expandido para suportar uma interface gráfica nativa em dispo
 2. No menu Pip do Pydroid 3, instale a biblioteca `kivy`.
 3. Copie o código do ficheiro `main.py` do repositório, cole-o no Pydroid 3 e clique em **Executar (Play)**.
 
+## 🛒 Vending Machine Software
+
+> **Looking for Vending Machine software? Buy it from me!**
+> 📩 Contact: [vendingsoftmachines@outlook.pt](mailto:vendingsoftmachines@outlook.pt)
 
