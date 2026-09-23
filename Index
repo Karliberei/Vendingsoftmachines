@@ -182,3 +182,14 @@ COPY . .
 EXPOSE 8080
 CMD ["python", "main.py"]
 
+
+├── app-python/             # A sua aplicação principal que rodará no Docker
+│   ├── src/
+│   │   ├── main.py         # O novo ponto de entrada único (Entrypoint)
+│   │   └── vending_logic.py# Lógica da máquina de vending isolada
+│   ├── requirements.txt    # Dependências Python do projeto
+│   └── Dockerfile          # Configuração do container
+├── firmware-arduino/       # Código C/C++ (.ino) para a placa Arduino
+└── app-android/            # Interface Kivy/Buildozer para o utilizador
+
+
