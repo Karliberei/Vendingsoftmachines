@@ -721,5 +721,25 @@ def rodar_painel_inteligente():
 if __name__ == "__main__":
     rodar_painel_inteligente()
 
+Vendingsoftmachines/
+├── .gitignore
+├── LICENSE
+├── README.md
+├── docker-compose.yml        # Para orquestrar o container e mapear o hardware
+├── app/                      # Onde reside a aplicação Python isolada
+│   ├── Dockerfile            # Configuração de build da imagem
+│   ├── requirements.txt      # Dependências (pyserial, etc. - Kivy sai daqui)
+│   └── src/
+│       ├── __init__.py
+│       ├── main.py           # NOVO PONTO DE ENTRADA (Entrypoint do Docker)
+│       ├── fsm.py            # Máquina de Estados Finitos isolada
+│       └── utils/
+│           └── export_csv.py # Sistema de faturação automática
+├── firmware/                 # Código C++/Arduino (antiga pasta 'Vending')
+│   └── controller.ino
+└── mobile/                   # Código Kivy para Android (para compilar via Buildozer)
+    └── main_android.py
+
+
 
 
