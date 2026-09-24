@@ -1,3 +1,27 @@
+# 1. Usar uma imagem oficial leve do Python
+FROM python:3.11-slim
+
+# 2. Instalar dependências de sistema necessárias para o Tkinter (X11 display)
+RUN apt-get update && apt-get install -y \
+    python3-tk \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. Definir o diretório de trabalho dentro do contentor
+WORKDIR /app
+
+# 4. Copiar todos os ficheiros do projeto para dentro do contentor
+COPY . /app/
+
+# 5. Definir a variável de ambiente para que o Python não crie ficheiros .pyc
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# 6. Comando para iniciar a aplicação
+CMD ["python", "vending.py"]
+
+
+
+
 # 1. Utiliza uma imagem oficial de Python leve como base
 FROM python:3.10-slim
 
