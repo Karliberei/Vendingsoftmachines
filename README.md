@@ -1,3 +1,39 @@
+
+# 🥤 Noxviva Vending Pro — Soyuz Bird Edition
+
+A **Noxviva Vending Pro** é um software avançado de controlo para máquinas de venda automática modernas. Desenvolvida em Python com uma arquitetura assíncrona cooperativa (imune a bloqueios de concorrência), a aplicação integra mecânicas inovadoras de gamificação comercial, telemetria estruturada e um cofre de persistência atómica.
+
+## ✨ Funcionalidades Principais
+
+* **🎲 Botão do Destino:** Mecânica exclusiva de gamificação. Por um valor fixo de 1.10€, a máquina seleciona de forma pseudo-aleatória um produto disponível em stock (permitindo escoamento inteligente e alta retenção de clientes).
+* **💾 Cofre Blindado (Persistência):** Gravação automática e atómica dos níveis de stock e contagem de moedas num ficheiro local `vending_state.json`.
+* **📊 Módulo de Telemetria:** Registo de auditoria estrita de cada transação no ficheiro `vending_sales_log.csv` com carimbo temporal e validação de NIF.
+* **🦅 Sistema de Áudio Estelar:** Feedback sonoro que emula o chilrear de pássaros para interações e celebração de prémios no Botão do Destino.
+* **🛠️ Painel de Engenharia Oculto:** Menu restrito para operadores realizarem sangria financeira e reabastecimento de mercadorias.
+
+## 🔑 Códigos de Operador (Guardar no Outlook)
+
+* **Código de Administração (Menu Secreto):** `SOYUZ1967` (Introduzir no campo NIF e clicar em Validar).
+* **Vouchers Ativos no Terminal:** `DESCONTO10` (0.50€) e `PROMOVIP` (1.00€).
+
+## 🚀 Como Executar
+
+### Pré-requisitos
+* Python 3.10 ou superior instalado.
+* Suporte gráfico Tkinter (incluído por padrão no Windows).
+
+### Execução Local
+1. Clone o repositório ou copie os ficheiros de código.
+2. Execute o script principal:
+   ```bash
+   python vending.py
+   ```
+
+---
+*Desenvolvido pela Equipa de Engenharia Noxviva (Gandra) — 2026.*
+
+
+
 # Vendingsoftmachines 🪙
 
 > Software para gestão e controlo de máquinas de venda automática (Vending Machines) a nível global.
