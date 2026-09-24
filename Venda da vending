@@ -1,3 +1,541 @@
+
+
+
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// --- DEFINIÇÃO DOS PINOS (ONDE PINAR) ---
+const int PINO_MOEDEIRO = 2;   // Cabo de sinal do moedeiro (gera pulsos)
+const int PINO_CANCELAR = 3;   // Botão de devolução de moedas
+const int MOTOR_A1      = 4;   // Relé/Motor do produto A1 (Água)
+const int MOTOR_B2      = 5;   // Relé/Motor do produto B2 (Chocolate)
+
+// Configuração do Ecrã LCD (Endereço 0x27, 16 colunas, 2 linhas)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Variáveis de controlo do sistema
+volatile float saldo = 0.0;
+const float PRECO_A1 = 1.00;
+const float PRECO_B2 = 1.50;
+
+// Função chamada automaticamente quando o moedeiro envia um sinal (Interrupção)
+void moedainserida() {
+  // Exemplo: Cada pulso do moedeiro configurado equivale a 0.10€
+  saldo += 0.10; 
+}
+
+void setup() {
+  // Configuração dos Pinos de Entrada
+  pinMode(PINO_MOEDEIRO, INPUT_PULLUP);
+  pinMode(PINO_CANCELAR, INPUT_PULLUP);
+  
+  // Associar o pino do moedeiro à função de contagem de dinheiro
+  attachInterrupt(digitalPinToInterrupt(PINO_MOEDEIRO), moedainserida, FALLING);
+
+  // Configuração os Pinos de Saída (Motores)
+  pinMode(MOTOR_A1, OUTPUT);
+  pinMode(MOTOR_B2, OUTPUT);
+  digitalWrite(MOTOR_A1, LOW); // Garante que o motor começa desligado
+  digitalWrite(MOTOR_B2, LOW);
+
+  // Inicializar o Ecrã LCD
+  lcd.init();
+  lcd.backlight();
+  atualizarEcra();
+}
+
+void loop() {
+  // 1. Atualiza constantemente o saldo no visor
+  static float saldoAnterior = -1;
+  if (saldo != saldoAnterior) {
+    atualizarEcra();
+    saldoAnterior = saldo;
+  }
+
+  // 2. Verificar se o utilizador carregou no botão Cancelar
+  if (digitalWrite(PINO_CANCELAR) == LOW) { // Botão pressionado (GND)
+    devolverDinheiro();
+  }
+
+  // 3. Simulação de botões de seleção de produto no painel físico
+  // Numa máquina real, usaria um teclado matricial ou mais botões digitais.
+  // Se o saldo chegar ao valor, a máquina liberta o produto automaticamente neste exemplo:
+  if (saldo >= PRECO_A1 && saldo < PRECO_B2) {
+    dispensarProduto(MOTOR_A1, "Agua Mineral", PRECO_A1);
+  } 
+  else if (saldo >= PRECO_B2) {
+    dispensarProduto(MOTOR_B2, "Chocolate", PRECO_B2);
+  }
+}
+
+void atualizarEcra() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Vending Machine");
+  lcd.setCursor(0, 1);
+  lcd.print("Saldo: ");
+  lcd.print(saldo);
+  lcd.print(" EUR");
+}
+
+void dispensarProduto(int pinoMotor, String nomeProduto, float preco) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("A dispensar:");
+  lcd.setCursor(0, 1);
+  lcd.print(nomeProduto);
+  
+  // Liga o motor por 2 segundos para rodar a espiral
+  digitalWrite(pinoMotor, HIGH);
+  delay(2000);
+  digitalWrite(pinoMotor, LOW);
+
+  // Calcula o troco líquido
+  float troco = saldo - preco;
+  if (troco > 0) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Troco: ");
+    lcd.print(troco);
+    lcd.print(" EUR");
+    delay(2000);
+  }
+
+  saldo = 0.0; // Faz o reset ao saldo
+  atualizarEcra();
+}
+
+void devolverDinheiro() {
+  if (saldo > 0) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("A devolver:");
+    lcd.setCursor(0, 1);
+    lcd.print(saldo);
+    lcd.print(" EUR");
+    delay(2000);
+    saldo = 0.0;
+  }
+  atualizarEcra();
+}
+
+
+// 📌 Configuração de Pinos do Hardware (Exemplo Base)
+const int BOTAO_CANCELAR = 2; // Pino do botão de devolução
+const int MOTOR_PRODUTO_1 = 8; // Pino do relé/motor da espiral 1
+
+// ⚙️ Definição dos Estados da Máquina (FSM)
+enum EstadoMaquina {
+  MODO_ESPERA,
+  VALIDACAO_SALDO,
+  VERIFICACAO_STOCK,
+  LIBERTAR_ITEM,
+  DEVOLVER_TROCO
+};
+
+EstadoMaquina estadoAtual = MODO_ESPERA;
+float saldoAtual = 0.0;
+
+void setup() {
+  Serial.begin(9600); // Comunicação com o monitor série
+  
+  // Configuração dos pinos
+  pinMode(BOTAO_CANCELAR, INPUT_PULLUP);
+  pinMode(MOTOR_PRODUTO_1, OUTPUT);
+  digitalWrite(MOTOR_PRODUTO_1, LOW); // Motor desligado inicialmente
+}
+
+void loop() {
+  // Executa a lógica dependendo do estado atual
+  switch (estadoAtual) {
+    case MODO_ESPERA:
+      // Aguarda moedas ou códigos
+      break;
+
+    case VALIDACAO_SALDO:
+      // Atualiza e valida o saldo inserido
+      break;
+
+    case VERIFICACAO_STOCK:
+      // Verifica se o item escolhido está disponível
+      break;
+
+    case LIBERTAR_ITEM:
+      // Ativa o motor da espiral
+      digitalWrite(MOTOR_PRODUTO_1, HIGH);
+      delay(2000); // Simula o tempo de rotação do motor
+      digitalWrite(MOTOR_PRODUTO_1, LOW);
+      estadoAtual = DEVOLVER_TROCO;
+      break;
+
+    case DEVOLVER_TROCO:
+      // Calcula o troco e liberta moedas extras
+      estadoAtual = MODO_ESPERA;
+      break;
+  }
+}
+
+import asyncio
+import logging
+import uuid
+from enum import Enum
+
+# Configuração de Logs de Alta Precisão para Auditoria Científica
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] (%(threadName)s) %(message)s")
+
+class MachineState(Enum):
+    IDLE = 1
+    PRODUCT_SELECTION = 2
+    AWAITING_PAYMENT = 3
+    DISPENSING = 4
+    TRANSACTION_COMPLETE = 5
+    FAULT = 6
+
+class VendingCoreSystem:
+    def __init__(self):
+        self.state = MachineState.IDLE
+        self.current_transaction_id = None
+        self.hardware_queue = asyncio.Queue()  # Canal de comunicação ICP/MDB -> Core
+        self.network_queue = asyncio.Queue()   # Canal de comunicação Core -> API/Cloud
+
+    async def mdb_hardware_loop(self):
+        """
+        Isolamento de Baixo Nível: Simula o polling contínuo do bus série MDB.
+        Lê interrupções físicas (botões, moedeiros, sensores de queda) sem bloquear a CPU.
+        """
+        logging.info("MDB Hardware Loop iniciado com polling a 9600 baud (simulado).")
+        while True:
+            # Em produção, isto lerá buffers de portas série (ex: pyserial-asyncio)
+            await asyncio.sleep(0.1)  # Polling rate de 100ms para evitar starvation
+            
+            # Exemplo de evento detetado: Utilizador pressionou o botão do produto 'A01'
+            if self.state == MachineState.IDLE:
+                event = {"type": "HARDWARE_PRESS", "payload": "A01"}
+                await self.hardware_queue.put(event)
+                # Alteramos o estado para evitar múltiplas leituras concorrentes do mesmo botão
+                self.state = MachineState.PRODUCT_SELECTION 
+
+    async def financial_transaction_worker(self, tx_id: str, amount: float):
+        """
+        Tratador Assíncrono I/O Bound para transações financeiras na Cloud.
+        Isola a latência da rede WAN (3G/4G/5G) das operações físicas da máquina.
+        """
+        logging.info(f"[TX: {tx_id}] A iniciar comunicação com o Gateway de Pagamento...")
+        try:
+            # Simulação de latência de rede variável de uma API bancária externa
+            await asyncio.sleep(1.8) 
+            
+            # Garantia atómica de sucesso do pagamento
+            payment_success = True 
+            
+            if payment_success:
+                logging.info(f"[TX: {tx_id}] Pagamento Aprovado pelo Gateway.")
+                return True
+            else:
+                logging.warning(f"[TX: {tx_id}] Pagamento Recusado.")
+                return False
+        except Exception as e:
+            logging.error(f"[TX: {tx_id}] Erro crítico de rede: {e}")
+            return False
+
+    async def central_orchestrator(self):
+        """
+        A Máquina de Estados Central (FSM).
+        Consome os eventos de hardware de forma puramente não bloqueante.
+        """
+        logging.info("Orquestrador Central FSM iniciado.")
+        while True:
+            # Aguarda o próximo evento de hardware na fila de forma assíncrona
+            event = await self.hardware_queue.get()
+            logging.info(f"Evento recebido no Core: {event['type']} | Estado Atual: {self.state.name}")
+
+            if event["type"] == "HARDWARE_PRESS" and self.state == MachineState.PRODUCT_SELECTION:
+                product_code = event["payload"]
+                self.current_transaction_id = str(uuid.uuid4())
+                self.state = MachineState.AWAITING_PAYMENT
+                
+                # Despara o worker financeiro em background (Concorrência Pura)
+                # O loop continua livre para monitorizar o hardware enquanto a rede responde
+                asyncio.create_task(self.process_sale(self.current_transaction_id, product_code))
+                
+            self.hardware_queue.task_done()
+
+    async def process_sale(self, tx_id: str, product_code: str):
+        """
+        Pipeline concorrente de venda. Gere o ciclo de vida completo de uma transação.
+        """
+        price = 2.50 # Simulação de custo obtido de uma DB em memória
+        
+        # Aguarda a resposta do gateway financeiro sem congelar os sensores da máquina
+        payment_approved = await self.financial_transaction_worker(tx_id, price)
+        
+        if payment_approved:
+            self.state = MachineState.DISPENSING
+            logging.info(f"[TX: {tx_id}] Ativando motor de passo para libertar produto {product_code}...")
+            
+            # Pulso elétrico para o motor da espiral (MDB command)
+            await asyncio.sleep(0.5) 
+            
+            # Sensor ótico infravermelho valida a queda do produto
+            product_dropped = True 
+            
+            if product_dropped:
+                self.state = MachineState.TRANSACTION_COMPLETE
+                logging.info(f"[TX: {tx_id}] Venda concluída com sucesso absoluto. Produto entregue.")
+            else:
+                self.state = MachineState.FAULT
+                logging.critical(f"[TX: {tx_id}] FALHA CRÍTICA: Motor rodou mas o produto não caiu. Iniciando estorno automático...")
+                # Aqui entraria a chamada assíncrona para reverter o pagamento (Refund API)
+        else:
+            logging.error(f"[TX: {tx_id}] Transação abortada. Notificando ecrã da máquina.")
+            
+        # Reset do estado para o ciclo seguinte
+        await asyncio.sleep(1.0)
+        self.state = MachineState.IDLE
+        self.current_transaction_id = None
+
+    async def telemetry_cloud_sync_loop(self):
+        """
+        Pipeline de Telemetria Secundário. 
+        Envia logs e métricas de saúde para a cloud em batch de forma assíncrona.
+        """
+        while True:
+            await asyncio.sleep(5.0) # Sincronização a cada 5 segundos
+            # Padrão Fire-and-Forget: Envia o estado atual da máquina e métricas térmicas
+            logging.info(f"[TELEMETRIA] Sincronizando estado operacional ({self.state.name}) com cluster central.")
+
+    async def main(self):
+        # Dispara todas as corrotinas concorrentes no loop de eventos global do Python
+        await asyncio.gather(
+            self.mdb_hardware_loop(),
+            self.central_orchestrator(),
+            self.telemetry_cloud_sync_loop()
+        )
+
+if __name__ == "__main__":
+    system = VendingCoreSystem()
+    try:
+        asyncio.run(system.main())
+    except KeyboardInterrupt:
+        logging.info("Sistema encerrado de forma segura.")
+
+
+
+# =====================================================================
+# EXTENSÃO CIENTÍFICA: MOTOR DE ARQUITETURA ASSÍNCRONA (ASYNCIO CORE)
+# =====================================================================
+import asyncio
+import logging
+import uuid
+from enum import Enum
+
+# Configuração de Logs de Alta Precisão para Auditoria Científica
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] (%(threadName)s) %(message)s")
+
+class MachineState(Enum):
+    IDLE = 1
+    PRODUCT_SELECTION = 2
+    AWAITING_PAYMENT = 3
+    DISPENSING = 4
+    TRANSACTION_COMPLETE = 5
+    FAULT = 6
+
+class VendingCoreSystem:
+    def __init__(self):
+        self.state = MachineState.IDLE
+        self.current_transaction_id = None
+        self.hardware_queue = asyncio.Queue()  # Canal de comunicação ICP/MDB -> Core
+        self.network_queue = asyncio.Queue()   # Canal de comunicação Core -> API/Cloud
+
+    async def mdb_hardware_loop(self):
+        """
+        Isolamento de Baixo Nível: Simula o polling contínuo do bus série MDB.
+        Lê interrupções físicas (botões, moedeiros, sensores de queda) sem bloquear a CPU.
+        """
+        logging.info("MDB Hardware Loop iniciado com polling a 9600 baud (simulado).")
+        while True:
+            # Em produção, isto lerá buffers de portas série (ex: pyserial-asyncio)
+            await asyncio.sleep(0.1)  # Polling rate de 100ms para evitar starvation
+            
+            # Exemplo de evento detetado: Utilizador pressionou o botão do produto 'A01'
+            if self.state == MachineState.IDLE:
+                event = {"type": "HARDWARE_PRESS", "payload": "A01"}
+                await self.hardware_queue.put(event)
+                # Alteramos o estado para evitar múltiplas leituras concorrentes do mesmo botão
+                self.state = MachineState.PRODUCT_SELECTION 
+
+    async def financial_transaction_worker(self, tx_id: str, amount: float):
+        """
+        Tratador Assíncrono I/O Bound para transações financeiras na Cloud.
+        Isola a latência da rede WAN (3G/4G/5G) das operações físicas da máquina.
+        """
+        logging.info(f"[TX: {tx_id}] A iniciar comunicação com o Gateway de Pagamento...")
+        try:
+            # Simulação de latência de rede variável de uma API bancária externa
+            await asyncio.sleep(1.8) 
+            
+            # Garantia atómica de sucesso do pagamento
+            payment_success = True 
+            
+            if payment_success:
+                logging.info(f"[TX: {tx_id}] Pagamento Aprovado pelo Gateway.")
+                return True
+            else:
+                logging.warning(f"[TX: {tx_id}] Pagamento Recusado.")
+                return False
+        except Exception as e:
+            logging.error(f"[TX: {tx_id}] Erro crítico de rede: {e}")
+            return False
+
+    async def central_orchestrator(self):
+        """
+        A Máquina de Estados Central (FSM).
+        Consome os eventos de hardware de forma puramente não bloqueante.
+        """
+        logging.info("Orquestrador Central FSM iniciado.")
+        while True:
+            # Aguarda o próximo evento de hardware na fila de forma assíncrona
+            event = await self.hardware_queue.get()
+            logging.info(f"Evento recebido no Core: {event['type']} | Estado Atual: {self.state.name}")
+
+            if event["type"] == "HARDWARE_PRESS" and self.state == MachineState.PRODUCT_SELECTION:
+                product_code = event["payload"]
+                self.current_transaction_id = str(uuid.uuid4())
+                self.state = MachineState.AWAITING_PAYMENT
+                
+                # Dispara o worker financeiro em background (Concorrência Pura)
+                # O loop continua livre para monitorizar o hardware enquanto a rede responde
+                asyncio.create_task(self.process_sale(self.current_transaction_id, product_code))
+                
+            self.hardware_queue.task_done()
+
+    async def process_sale(self, tx_id: str, product_code: str):
+        """
+        Pipeline concorrente de venda. Gere o ciclo de vida completo de uma transação.
+        """
+        price = 2.50 # Simulação de custo obtido de uma DB em memória
+        
+        # Aguarda a resposta do gateway financeiro sem congelar os sensores da máquina
+        payment_approved = await self.financial_transaction_worker(tx_id, price)
+        
+        if payment_approved:
+            self.state = MachineState.DISPENSING
+            logging.info(f"[TX: {tx_id}] Ativando motor de passo para libertar produto {product_code}...")
+            
+            # Pulso elétrico para o motor da espiral (MDB command)
+            await asyncio.sleep(0.5) 
+            
+            # Sensor ótico infravermelho valida a queda do produto
+            product_dropped = True 
+            
+            if product_dropped:
+                self.state = MachineState.TRANSACTION_COMPLETE
+                logging.info(f"[TX: {tx_id}] Venda concluída com sucesso absoluto. Produto entregue.")
+            else:
+                self.state = MachineState.FAULT
+                logging.critical(f"[TX: {tx_id}] FALHA CRÍTICA: Motor rodou mas o produto não caiu. Iniciando estorno automático...")
+        else:
+            logging.error(f"[TX: {tx_id}] Transação abortada. Notificando ecrã da máquina.")
+            
+        # Reset do estado para o ciclo seguinte
+        await asyncio.sleep(1.0)
+        self.state = MachineState.IDLE
+        self.current_transaction_id = None
+
+    async def telemetry_cloud_sync_loop(self):
+        """
+        Pipeline de Telemetria Secundário. 
+        Envia logs e métricas de saúde para a cloud em batch de forma assíncrona.
+        """
+        while True:
+            await asyncio.sleep(5.0) # Sincronização a cada 5 segundos
+            logging.info(f"[TELEMETRIA] Sincronizando estado operacional ({self.state.name}) com cluster central.")
+
+    async def main(self):
+        # Dispara todas as corrotinas concorrentes no loop de eventos global do Python
+        await asyncio.gather(
+            self.mdb_hardware_loop(),
+            self.central_orchestrator(),
+            self.telemetry_cloud_sync_loop()
+        )
+
+def iniciar_sistema_assincrono():
+    """Função de disparo para inicializar o loop assíncrono."""
+    sistema = VendingCoreSystem()
+    try:
+        asyncio.run(sistema.main())
+    except KeyboardInterrupt:
+        logging.info("Sistema encerrado de forma segura.")
+
+
+import asyncio
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.clock import Clock
+
+# Injetando o Core da sua Máquina de Estados Assíncrona
+class VendingEngine:
+    def __init__(self):
+        self.saldo = 0.0
+        self.estado = "IDLE"
+
+    async def inserir_moeda_async(self, valor):
+        self.estado = "PROCESSING_PAYMENT"
+        await asyncio.sleep(0.5) # Simula o tempo de validação física do moedeiro
+        self.saldo += valor
+        self.estado = "IDLE"
+        return self.saldo
+
+    async def despachar_produto_async(self, codigo):
+        if self.saldo >= 1.50: # Preço fixo simulado para teste
+            self.estado = "DISPENSING"
+            await asyncio.sleep(1.5) # Simula o motor de passo MDB a rodar
+            self.saldo -= 1.50
+            self.estado = "TRANSACTION_COMPLETE"
+            await asyncio.sleep(1.0)
+            self.estado = "IDLE"
+            return True, "Produto Entregue com Sucesso!"
+        return False, "Saldo Insuficiente!"
+
+class VendingAndroidApp(App):
+    def build(self):
+        self.engine = VendingEngine()
+        self.layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
+        
+        # Elementos do Ecrã da Máquina (UI)
+        self.status_label = Label(text="ESTADO: IDLE", font_size='20sp', size_hint_y=None, height=50)
+        self.saldo_label = Label(text="SALDO: 0.00 €", font_size='32sp', color=[0, 1, 0, 1])
+        
+        # Botões de Interação
+        btn_moeda = Button(text="Inserir Moeda de 1.00 €", size_hint_y=None, height=60, background_color=[0.2, 0.6, 1, 1])
+        btn_moeda.bind(on_press=lambda x: self.run_async(self.inserir_moeda(1.00)))
+        
+        btn_comprar = Button(text="Comprar Produto (1.50 €)", size_hint_y=None, height=60, background_color=[1, 0.4, 0.4, 1])
+        btn_comprar.bind(on_press=lambda x: self.run_async(self.comprar_produto("A01")))
+        
+        # Montagem do Layout
+        self.layout.add_widget(self.status_label)
+        self.layout.add_widget(self.saldo_label)
+        self.layout.add_widget(btn_moeda)
+        self.layout.add_widget(btn_comprar)
+        
+        # Loop de atualização da UI acoplado ao Kivy
+        Clock.schedule_interval(self.update_ui, 0.1)
+        return self.layout
+
+    def run_async(self, coro):
+        """Garante que a tarefa roda de forma não bloqueante na App"""
+        asyncio.ensure_future(coro)
+
+    async def inserir_moeda(self, valor):
+        novo_saldo = await self.engine.inserir_moeda_async(valor)
+        self.saldo_label.text = f"SALDO: {novo_saldo:.2f} €"
+
+    async def
+
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
