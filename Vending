@@ -1,3 +1,210 @@
+
+import logging
+import random
+import re
+import time
+import tkinter as tk
+from tkinter import scrolledtext
+from decimal import Decimal
+from datetime import datetime
+
+# --- CONFIGURAÇÃO DE LOGS ---
+class TkinterLogHandler(logging.Handler):
+    def __init__(self, tw):
+        super().__init__()
+        self.tw = tw
+    def emit(self, rec):
+        msg = self.format(rec)
+        self.tw.configure(state='normal')
+        self.tw.insert(tk.END, msg + '\n')
+        self.tw.configure(state='disabled')
+        self.tw.yview(tk.END)
+
+logger = logging.getLogger("VM")
+logger.setLevel(logging.INFO)
+fmt = logging.Formatter("%(message)s")
+
+# --- MOTOR E ESTADO DA MÁQUINA ---
+class VendingMachine:
+    def __init__(self):
+        self.saldo = Decimal("0.00")
+        self.produtos = {
+            "A1": {"nome": "Coca-Cola", "preco": Decimal("1.50"), "stock": 3},
+            "A2": {"nome": "Água Mineral", "preco": Decimal("1.00"), "stock": 5},
+            "A3": {"nome": "Sprite", "preco": Decimal("1.40"), "stock": 4},
+            "B1": {"nome": "Batatas Fritas", "preco": Decimal("1.20"), "stock": 2},
+            "B2": {"nome": "Chocolates", "preco": Decimal("1.80"), "stock": 3},
+            "B3": {"nome": "Energético", "preco": Decimal("2.50"), "stock": 4}
+        }
+        self.tubos = {Decimal("2.00"): 10, Decimal("1.00"): 10, Decimal("0.50"): 20, Decimal("0.20"): 20, Decimal("0.10"): 30}
+
+    def calc_troco(self, val: Decimal) -> dict:
+        res, resto = {}, val
+        for m in sorted(self.tubos.keys(), reverse=True):
+            if resto <= 0: break
+            qtd = min(int(resto // m), self.tubos[m])
+            if qtd > 0: res[m] = qtd; resto -= m * qtd
+        return res if resto == 0 else None
+
+    def atualizar_bolsa(self, slot):
+        for s, p in self.produtos.items():
+            if s == slot: p["preco"] = max(Decimal("0.50"), p["preco"] + Decimal("0.10"))
+            else: p["preco"] = max(Decimal("0.40"), p["preco"] - Decimal("0.05"))
+
+# --- INTERFACE GRÁFICA CONTROLADORA ---
+class VMUi:
+    def __init__(self, vm):
+        self.vm = vm
+        self.ultimo_clique = 0.0
+        
+        self.root = tk.Tk()
+        self.root.title("Noxviva Vending Pro")
+        self.root.geometry("440x840")
+        self.root.configure(bg="#121214")
+        
+        self.lbl_saldo = tk.Label(self.root, text="0.00€", font=("Courier", 20, "bold"), fg="#00ff00", bg="#000000", height=2)
+        self.lbl_saldo.pack(pady=5, fill="x", padx=15)
+        
+        self.cv = tk.Canvas(self.root, width=400, height=100, bg="#0a0f1d", highlightthickness=1, highlightbackground="#00ff00")
+        self.cv.pack(pady=5, padx=15)
+        self.lbl_pique = self.cv.create_text(200, 50, text="📊 NOXVIVA OPERACIONAL\nInsira moedas ou valide o MB WAY", fill="#00ff00", font=("Arial", 10, "bold"), justify="center")
+        
+        f_nif = tk.LabelFrame(self.root, text=" 📝 Dados do Cliente ", fg="white", bg="#121214")
+        f_nif.pack(pady=2, fill="x", padx=15)
+        tk.Label(f_nif, text="NIF para Recibo:", fg="white", bg="#121214").pack(side="left", padx=5)
+        self.ent_nif = tk.Entry(f_nif, width=15); self.ent_nif.pack(side="left", padx=5, pady=5)
+
+        f_mb = tk.LabelFrame(self.root, text=" 📱 Pagamento Digital ", fg="#00ffff", bg="#121214")
+        f_mb.pack(pady=2, fill="x", padx=15)
+        tk.Button(f_mb, text="📲 Pagar com MB WAY (Insere 2.50€)", bg="#e83e8c", fg="white", font=("Arial", 9, "bold"), command=self.simular_mbway).pack(fill="x", pady=2)
+
+        fm = tk.LabelFrame(self.root, text=" Moedas ", fg="white", bg="#121214")
+        fm.pack(pady=2, fill="x", padx=15)
+        for m in ["0.10", "0.20", "0.50", "1.00", "2.00"]:
+            tk.Button(fm, text=f"{m}€", bg="#1b4d3e", fg="#00ff00", font=("Arial", 8, "bold"), command=lambda v=m: self.add_moeda(v)).pack(side="left", padx=2, expand=True)
+
+        fp = tk.LabelFrame(self.root, text=" Mercadorias ", fg="white", bg="#121214")
+        fp.pack(pady=2, fill="x", padx=15)
+        self.b_prods = {}
+        for s, p in self.vm.produtos.items():
+            b = tk.Button(fp, text="", bg="#1f1f23", fg="white", font=("Consolas", 8, "bold"), anchor="w", command=lambda sl=s: self.executar_venda(sl))
+            b.pack(pady=1, fill="x"); self.b_prods[s] = b
+        self.up_ui()
+            
+        f_dest = tk.LabelFrame(self.root, text=" Jogo ", fg="#ff0055", bg="#121214")
+        f_dest.pack(pady=2, fill="x", padx=15)
+        tk.Button(f_dest, text="✨ BOTÃO DO DESTINO (1.10€)", bg="#ff0055", fg="white", font=("Arial", 9, "bold"), command=lambda: self.executar_venda("DESTINO")).pack(fill="x", pady=2)
+            
+        tk.Button(self.root, text="🔄 Devolver Troco / Cancelar", bg="#333", fg="white", font=("Arial", 9), command=self.devolver_troco).pack(pady=4, fill="x", padx=15)
+        self.txt = scrolledtext.ScrolledText(self.root, height=10, bg="#0d0e15", fg="#a9b7c6", font=("Courier", 8), state='disabled'); self.txt.pack(pady=3, fill="both", expand=True, padx=15)
+
+    def add_moeda(self, v):
+        now = time.time()
+        if now - self.ultimo_clique < 0.3 and self.ultimo_clique != 0: self.modo_best()
+        self.ultimo_clique = now
+        self.vm.saldo += Decimal(v)
+        self.up_ui()
+        logger.info(f"🪙 +{v}€ | Saldo: {self.vm.saldo:.2f}€")
+
+    def simular_mbway(self):
+        self.cv.itemconfig(self.lbl_pique, text="📱 A VALIDAR MB WAY...", fill="#e83e8c")
+        self.root.after(1200, self._concluir_mbway)
+
+    def _concluir_mbway(self):
+        self.vm.saldo += Decimal("2.50")
+        self.up_ui()
+        self.animar_pique("", "mbway")
+        logger.info("📱 MB WAY carregado com sucesso: +2.50€")
+
+    def devolver_troco(self):
+        if self.vm.saldo > 0:
+            t = self.vm.calc_troco(self.vm.saldo)
+            if t is not None:
+                logger.info(f"🔄 Troco total de {self.vm.saldo:.2f}€ devolvido:")
+                for m, q in t.items(): 
+                    self.vm.tubos[m] -= q
+                    logger.info(f"  -> {q}x {m}€")
+                self.vm.saldo = Decimal("0.00")
+            else: 
+                logger.warning("⚠️ Troco exato indisponível nos tubos de moedas!")
+            self.up_ui()
+        else: 
+            logger.info("ℹ️ Não existe saldo acumulado para devolver.")
+
+    def executing_venda_logica(self, slot):
+        if slot == "DESTINO":
+            validos = [s for s, p in self.vm.produtos.items() if p["stock"] > 0]
+            if not validos: 
+                logger.error("❌ Máquina Esgotada! Destino cancelado.")
+                return
+            slot, preco, tipo = random.choice(validos), Decimal("1.10"), "destino"
+        else: 
+            preco, tipo = self.vm.produtos[slot]["preco"], "alta"
+            
+        p = self.vm.produtos[slot]
+        if p["stock"] <= 0: 
+            logger.warning(f"❌ [{slot}] encontra-se esgotado.")
+        elif self.vm.saldo < preco: 
+            logger.warning(f"💰 Saldo insuficiente para [{slot}] ({preco:.2f}€).")
+        else:
+            p["stock"] -= 1
+            self.vm.saldo -= preco
+            self.vm.atualizar_bolsa(slot)
+            self.up_ui()
+            self.animar_pique(p['nome'], tipo)
+            self.emitir_recibo_legal(p['nome'], preco)
+            logger.info(f"🥤 Entregue: {p['nome']}! (Restam {p['stock']} un)")
+
+    def executar_venda(self, slot):
+        self.root.after(0, lambda: self.executing_venda_logica(slot))
+
+    def up_ui(self):
+        self.lbl_saldo.config(text=f"{self.vm.saldo:.2f}€")
+        for s, p in self.vm.produtos.items(): 
+            st = "ESGOTADO" if p["stock"] <= 0 else f"{p['preco']:.2f}€ ({p['stock']})"
+            self.b_prods[s].config(text=f"[{s}] {p['nome']:<16} | {st}")
+            
+    def reset_ecra(self):
+        self.cv.delete("all")
+        self.cv.config(bg="#0a0f1d")
+        self.lbl_pique = self.cv.create_text(200, 50, text="📊 MERCADO NOXVIVA\nEscolha o seu produto.", fill="#00ff00", font=("Arial", 10, "bold"), justify="center")
+
+    def modo_best(self):
+        self.cv.config(bg="#001133")
+        self.cv.itemconfig(self.lbl_pique, text="🏆 TU ÉS O MAIOR NESTA MÁQUINA!", fill="#00ffff")
+        self.root.after(2000, self.reset_ecra)
+
+    def animar_pique(self, nome, tipo="alta"):
+        self.cv.delete("all")
+        self.cv.config(bg="#0a0f1d")
+        txt, cor = (f"📈 BOLSA: {nome} EM ALTA!", "#00ff00") if tipo == "alta" else (f"🎲 DESTINO: {nome}!", "#ff0055")
+        if tipo == "mbway": txt, cor = "📱 MB WAY APROVADO!", "#00ffff"
+        self.lbl_pique = self.cv.create_text(200, 50, text=txt, fill=cor, font=("Arial", 10, "bold"), justify="center")
+        self.cv.create_line(50, 80, 200, 50, 350, 20, fill=cor, width=3, arrow="last")
+        self.root.after(3000, self.reset_ecra)
+
+    def emitir_recibo_legal(self, nome_prod, preco_pago):
+        base, nif = preco_pago / Decimal("1.23"), self.ent_nif.get().strip()
+        nif_usr = nif if re.match(r"^\d{9}$", nif) else "999999990"
+        recibo = (
+            f"\n========================================\n               NOXVIVA                 \n       [ ||| VENDING PRO ||| ]         \n========================================\n"
+            f" NIF: 204122406   |  Tel: 210 000 000   \n Alv. Rec.: Gandra, Portugal            \n----------------------------------------\n"
+            f" FATURA-SIMPLIFICADA: FR PT/{random.randint(1000,9999)} \n Data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n NIF Cliente: {nif_usr}\n----------------------------------------\n"
+            f" {nome_prod:<25} 1     {preco_pago:.2f}€ \n----------------------------------------\n TX IVA    BASE INC.    IVA DET.   TOTAL\n 23%        {base:.2f}€        {preco_pago - base:.2f}€       {preco_pago:.2f}€\n========================================\n"
+        )
+        logger.info(recibo)
+
+if __name__ == "__main__":
+    vm_machine = VendingMachine()
+    ui_app = VMUi(vm_machine)
+    hnd = TkinterLogHandler(ui_app.txt)
+    hnd.setFormatter(fmt)
+    logger.addHandler(hnd)
+    ui_app.root.mainloop()
+
+
+
+
 import time
 
 class VendingMachine:
