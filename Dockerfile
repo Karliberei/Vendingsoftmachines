@@ -86,6 +86,7 @@ python "Venda da vending.py"
 
 
 from telemetry import report_sale_to_cloud, report_stock_alert
+TELEMETRY_ENDPOINT = "http://192.168.1"
 
 
 import asyncio
