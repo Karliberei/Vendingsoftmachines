@@ -155,5 +155,239 @@ Dockerfile failed to build error
 unsuccessful command 'flyctl deploy --build-only --push -a vendingsoftmachines-nqghvw --image-label deployment-b0917cff4bdf2c8c95a814bf67de55ae --config fly.toml'
 
 
+import asyncio
+import logging
+import urllib.request
+import urllib.error
+import json
+import tkinter as tk
+from tkinter import scrolledtext
+from decimal import Decimal
+from datetime import datetime, timezone
 
+# 1. CONFIGURAÇÃO DO EMISSOR DE LOGS PERSONALIZADO PARA O TKINTER
+class TkinterLogHandler(logging.Handler):
+    """Redireciona os logs do Python diretamente para o componente de texto da UI."""
+    def __init__(self, text_widget):
+        super().__init__()
+        self.text_widget = text_widget
+
+    def emit(self, record):
+        msg = self.format(record)
+        def append_msg():
+            self.text_widget.configure(state='normal')
+            self.text_widget.insert(tk.END, msg + '\n')
+            self.text_widget.configure(state='disabled')
+            self.text_widget.yview(tk.END) # Auto-scroll para o fim
+        self.text_widget.after(0, append_msg)
+
+# Configuração Base do Logger
+logger = logging.getLogger("VendingMachine")
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", "%H:%M:%S")
+
+# 2. CONFIGURAÇÃO DA TELEMETRIA
+TELEMETRY_ENDPOINT = "https://httpbin.org"
+MACHINE_ID = "MAQ_PT_001"
+
+# 3. CONTROLADOR MDB MOCK
+class MDBControllerMock:
+    def __init__(self, port='/dev/ttyUSB0'):
+        self.port = port
+        self.simular_moeda_proxima_leitura = Decimal("0.00")
+        
+    def conectar(self):
+        logger.info(f"🔌 Conectado à porta serial: {self.port}")
+        
+    def verificar_moedas(self) -> Decimal:
+        if self.simular_moeda_proxima_leitura > 0:
+            valor = self.simular_moeda_proxima_leitura
+            self.simular_moeda_proxima_leitura = Decimal("0.00")
+            return valor
+        return Decimal("0.00")
+
+mdb = MDBControllerMock(port='/dev/ttyUSB0')
+
+saldo_atual = Decimal("0.00")
+stock_coca_cola = 3
+modo_manutencao = False
+
+# 4. INTERFACE GRÁFICA COMPLETA (O Quadro Único)
+class VendingDashboard:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Vending Machine System Panel")
+        self.root.geometry("450x680")
+        self.root.configure(bg="#1e1e24")
+        
+        # --- TÍTULO ---
+        label_titulo = tk.Label(self.root, text="PAINEL INTEGRADO VENDING", font=("Arial", 16, "bold"), fg="#ffffff", bg="#1e1e24")
+        label_titulo.pack(pady=10)
+        
+        # --- ECRÃ DIGITAL DO SALDO ---
+        self.frame_saldo = tk.Frame(self.root, bg="#000000", bd=5, relief="sunken")
+        self.frame_saldo.pack(pady=5, fill="x", padx=30)
+        
+        self.label_saldo = tk.Label(self.frame_saldo, text="0.00€", font=("Courier", 32, "bold"), fg="#00ff00", bg="#000000")
+        self.label_saldo.pack(pady=5)
+        
+        # --- QUADRO DE LUZES (STATUS) ---
+        self.frame_luzes = tk.LabelFrame(self.root, text=" Painel de Luzes de Status ", fg="#ffffff", bg="#1e1e24", font=("Arial", 10, "bold"), padx=20, pady=10)
+        self.frame_luzes.pack(pady=5, fill="x", padx=30)
+        
+        # 🟢 Luz MDB
+        self.luz_mdb_canvas = tk.Canvas(self.frame_luzes, width=18, height=18, bg="#1e1e24", highlightthickness=0)
+        self.luz_mdb_canvas.grid(row=0, column=0, padx=5, pady=3)
+        self.luz_mdb = self.luz_mdb_canvas.create_oval(2, 2, 16, 16, fill="#00ff00")
+        self.label_luz_mdb = tk.Label(self.frame_luzes, text="Hardware MDB (Online)", fg="#ffffff", bg="#1e1e24")
+        self.label_luz_mdb.grid(row=0, column=1, sticky="w", padx=5)
+        
+        # 🌐 Luz Telemetria
+        self.luz_net_canvas = tk.Canvas(self.frame_luzes, width=18, height=18, bg="#1e1e24", highlightthickness=0)
+        self.luz_net_canvas.grid(row=1, column=0, padx=5, pady=3)
+        self.luz_net = self.luz_net_canvas.create_oval(2, 2, 16, 16, fill="#444444")
+        self.label_luz_net = tk.Label(self.frame_luzes, text="Nuvem / Rede Telemetria", fg="#ffffff", bg="#1e1e24")
+        self.label_luz_net.grid(row=1, column=1, sticky="w", padx=5)
+
+        # 🔴 Luz Alerta de Stock
+        self.luz_stock_canvas = tk.Canvas(self.frame_luzes, width=18, height=18, bg="#1e1e24", highlightthickness=0)
+        self.luz_stock_canvas.grid(row=2, column=0, padx=5, pady=3)
+        self.luz_stock = self.luz_stock_canvas.create_oval(2, 2, 16, 16, fill="#444444")
+        self.label_luz_stock = tk.Label(self.frame_luzes, text="Alerta: Produto Esgotado", fg="#ffffff", bg="#1e1e24")
+        self.label_luz_stock.grid(row=2, column=1, sticky="w", padx=5)
+
+        # 🔧 Luz Modo Manutenção
+        self.luz_manut_canvas = tk.Canvas(self.frame_luzes, width=18, height=18, bg="#1e1e24", highlightthickness=0)
+        self.luz_manut_canvas.grid(row=3, column=0, padx=5, pady=3)
+        self.luz_manut = self.luz_manut_canvas.create_oval(2, 2, 16, 16, fill="#444444")
+        self.label_luz_manut = tk.Label(self.frame_luzes, text="Bloqueio de Manutenção", fg="#ffffff", bg="#1e1e24")
+        self.label_luz_manut.grid(row=3, column=1, sticky="w", padx=5)
+
+        # --- BOTÕES DE INTERAÇÃO ---
+        self.btn_moeda = tk.Button(self.root, text="🪙 Inserir Moeda (0.50€)", font=("Arial", 11, "bold"), bg="#28a745", fg="white", command=self.simular_moeda)
+        self.btn_moeda.pack(pady=5, fill="x", padx=30)
+        
+        self.btn_venda = tk.Button(self.root, text=f"🛒 Comprar Coca-Cola (1.50€) [Qtd: {stock_coca_cola}]", font=("Arial", 11, "bold"), bg="#007bff", fg="white", command=self.trigger_venda)
+        self.btn_venda.pack(pady=3, fill="x", padx=30)
+
+        self.btn_manutencao = tk.Button(self.root, text="🔧 Ligar/Desligar Manutenção", font=("Arial", 10), bg="#6c757d", fg="white", command=self.toggle_manutencao)
+        self.btn_manutencao.pack(pady=5, fill="x", padx=30)
+        
+        # --- CONSOLA DE LOGS EMBUTIDA NO QUADRO ---
+        self.frame_logs = tk.LabelFrame(self.root, text=" Consola do Sistema (Logs em Tempo Real) ", fg="#ffffff", bg="#1e1e24", font=("Arial", 10, "bold"))
+        self.frame_logs.pack(pady=10, fill="both", expand=True, padx=30)
+        
+        self.log_text = scrolledtext.ScrolledText(self.frame_logs, height=8, bg="#0d0e15", fg="#a9b7c6", font=("Courier", 9), state='disabled')
+        self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
+
+        self.venda_solicitada = False
+
+    def simular_moeda(self):
+        if not modo_manutencao:
+            mdb.simular_moeda_proxima_leitura = Decimal("0.50")
+        else:
+            logger.warning("⚠️ Máquina em manutenção. Não aceita moedas.")
+
+    def trigger_venda(self):
+        if not modo_manutencao:
+            self.venda_solicitada = True
+        else:
+            logger.warning("⚠️ Venda bloqueada: Máquina em manutenção.")
+
+    def toggle_manutencao(self):
+        global modo_manutencao
+        modo_manutencao = not modo_manutencao
+        cor = "#ffc107" if modo_manutencao else "#444444"
+        self.luz_manut_canvas.itemconfig(self.luz_manut, fill=cor)
+        logger.info(f"🔧 Modo manutenção alterado para: {'ATIVADO' if modo_manutencao else 'DESATIVADO'}")
+
+    def atualizar_saldo_tela(self, valor: Decimal):
+        self.label_saldo.config(text=f"{valor:.2f}€")
+
+    def atualizar_botao_stock(self):
+        self.btn_venda.config(text=f"🛒 Comprar Coca-Cola (1.50€) [Qtd: {stock_coca_cola}]")
+
+    def piscar_luz_mdb(self):
+        self.luz_mdb_canvas.itemconfig(self.luz_mdb, fill="#007bff")
+        self.root.after(150, lambda: self.luz_mdb_canvas.itemconfig(self.luz_mdb, fill="#00ff00"))
+
+    def set_luz_telemetria(self, estado: str):
+        cor = "#444444"
+        if estado == "ENVIANDO": cor = "#ffc107"
+        elif estado == "SUCESSO": cor = "#00ff00"
+        elif estado == "ERRO": cor = "#dc3545"
+        self.luz_net_canvas.itemconfig(self.luz_net, fill=cor)
+
+    def set_luz_stock(self, ativo: bool):
+        cor = "#dc3545" if ativo else "#444444"
+        self.luz_stock_canvas.itemconfig(self.luz_stock, fill=cor)
+
+    async def updater_loop(self):
+        try:
+            while True:
+                self.root.update()
+                await asyncio.sleep(0.02)
+        except tk.TclError:
+            asyncio.get_running_loop().stop()
+
+ui = VendingDashboard()
+
+tkinter_handler = TkinterLogHandler(ui.log_text)
+tkinter_handler.setFormatter(formatter)
+logger.addHandler(tkinter_handler)
+
+mdb.conectar()
+
+def _sync_send_telemetry(payload: dict):
+    ui.root.after(0, lambda: ui.set_luz_telemetria("ENVIANDO"))
+    logger.info(f"📡 Nuvem: A tentar enviar evento {payload.get('event_type')}...")
+    
+    data = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(TELEMETRY_ENDPOINT, data=data, headers={'Content-Type': 'application/json'}, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=3.0) as response:
+            status_code = response.getcode()
+            if status_code in:
+                logger.info(f"📊 Nuvem: Telemetria enviada com sucesso!")
+                ui.root.after(0, lambda: ui.set_luz_telemetria("SUCESSO"))
+            else:
+                logger.error(f"⚠️ Nuvem: Servidor recusou dados (Status {status_code}).")
+                ui.root.after(0, lambda: ui.set_luz_telemetria("ERRO"))
+    except Exception as e:
+        logger.error(f"❌ Nuvem: Erro na ligação à rede.")
+        ui.root.after(0, lambda: ui.set_luz_telemetria("ERRO"))
+
+async def send_telemetry_event(payload: dict):
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(None, _sync_send_telemetry, payload)
+
+async def report_sale_to_cloud(machine_id: str, code: str, name: str, price: Decimal):
+    payload = {
+        "machine_id": machine_id, "event_type": "SALE", "timestamp": datetime.now(timezone.utc).isoformat(),
+        "data": {"slot": code, "product_name": name, "amount_paid": str(price)}
+    }
+    await send_telemetry_event(payload)
+
+async def report_stock_alert(machine_id: str, code: str, name: str):
+    payload = {
+        "machine_id": machine_id, "event_type": "STOCK_ALERT", "timestamp": datetime.now(timezone.utc).isoformat(),
+        ""data": {"slot": code, "product_name":
+            
+             
+              
+               
+                
+                 
+                  
+                   
+                    
+                     
+                      
+                       
+                        
+                         
+                          
+                           
+                             , "status": "OUT_OF_STOCK"}}await send_telemetry_event(payload)async def mdb_polling_task():global saldo_atuallogger.info("🤖 Sistema MDB: Ciclo de polling de hardware iniciado.")while True:try:valor_inserido = mdb.verificar_moedas()if valor_inserido > 0:saldo_atual += valor_inseridoui.atualizar_saldo_tela(saldo_atual)ui.piscar_luz_mdb()logger.info(f"🪙 MDB Hardware: Moeda detetada. Saldo Atual: {saldo_atual}€")except Exception as e:logger.error(f"💥 Falha crítica no MDB: {e}")await asyncio.sleep(0.2)async def pipeline_venda_task():global saldo_atual, stock_coca_colawhile True:if ui.venda_solicitada:ui.venda_solicitada = Falsepreco_coca = Decimal("1.50")if stock_coca_cola <= 0:logger.error("🛒 Venda: Operação abortada. Produto ESGOTADO!")ui.set_luz_stock(True)await report_stock_alert(MACHINE_ID, "A1", "Coca-Cola")elif saldo_atual >= preco_coca:saldo_atual -= preco_cocastock_coca_cola -= 1ui.atualizar_saldo_tela(saldo_atual)ui.atualizar_botao_stock()ui.set_luz_stock(False)logger.info(f"🥤 Mecânica: Produto libertado! Stock restante: {stock_coca_cola}")await report_sale_to_cloud(MACHINE_ID, "A1", "Coca-Cola", preco_coca)else:logger.warning(f"💳 Venda: Saldo insuficiente. Faltam {(preco_coca - saldo_atual):.2f}€")await asyncio.sleep(0.1)async def main():await asyncio.gather(ui.updater_loop(),mdb_polling_task(),pipeline_venda_task())if name == "main":try:asyncio.run(main())except (KeyboardInterrupt, RuntimeError):pass
+<FollowUp>
 
