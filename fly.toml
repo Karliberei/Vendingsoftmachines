@@ -21,8 +21,7 @@ primary_region = 'ams'
   cpu_kind = 'shared'
   cpus = 1
   memory_mb = 256
-# 1. Utiliza uma imagem oficial de Python leve como base
-FROM python:3.10-slim
+
 
 
 
