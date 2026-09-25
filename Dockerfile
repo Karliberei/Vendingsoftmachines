@@ -1,3 +1,16 @@
+# 1. Utiliza una imagen oficial de Python nivel como base
+FROM python:3.10-slim
+
+# 2. Defina el directorio de trabajo dentro del contenedor
+WORKDIR /app
+
+# Adiciona o resto dos teus comandos do Dockerfile aqui, por exemplo:
+# COPY . .
+# RUN pip install -r requirements.txt
+# CMD ["python", "main.py"]
+
+
+
 # 1. Usar uma imagem oficial leve do Python
 FROM python:3.11-slim
 
