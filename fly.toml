@@ -24,8 +24,7 @@ primary_region = 'ams'
 # 1. Utiliza uma imagem oficial de Python leve como base
 FROM python:3.10-slim
 
-# 2. Define o diretório de trabalho dentro do container
-WORKDIR /app
+
 
 # 3. Instala dependências do sistema necessárias para comunicações e compilações de bibliotecas
 RUN apt-get update && apt-get install -y --no-install-recommends \
